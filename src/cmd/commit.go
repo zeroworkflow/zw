@@ -9,14 +9,16 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
-	"zero-workflow/src/internal/config"
+	zeroconfig "zero-workflow/src/internal/config"
 	"zero-workflow/src/pkg/ai/zai"
 )
 
 var (
 	commitLang string
+	autoPush   bool
 )
 
 var commitCmd = &cobra.Command{
@@ -32,6 +34,7 @@ Supported languages: ru (Russian), en (English), uk (Ukrainian), kz (Kazakh)`,
 func init() {
 	rootCmd.AddCommand(commitCmd)
 	commitCmd.Flags().StringVarP(&commitLang, "lang", "l", "en", "Language for commit messages (ru, en, uk, kz)")
+	commitCmd.Flags().BoolVarP(&autoPush, "push", "p", false, "Automatically push after commit (if remote exists)")
 }
 
 func runCommit(cmd *cobra.Command, args []string) error {
@@ -130,6 +133,16 @@ func runCommit(cmd *cobra.Command, args []string) error {
 	}
 
 	color.Green("✓ Commit created successfully: %s", commit.String()[:8])
+	
+	// Auto push if requested and remote exists
+	if autoPush {
+		if err := pushToRemote(repo); err != nil {
+			color.Yellow("Warning: Failed to push: %v", err)
+		} else {
+			color.Green("✓ Pushed to remote successfully")
+		}
+	}
+	
 	return nil
 }
 
@@ -139,7 +152,7 @@ type CommitOption struct {
 }
 
 func generateCommitMessages(diff string, files []string) ([]CommitOption, error) {
-	token, err := config.GetToken()
+	token, err := zeroconfig.GetToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get AI token: %w", err)
 	}
@@ -257,6 +270,33 @@ func getStagedDiff(repo *git.Repository) (string, error) {
 	return "Staged changes detected", nil
 }
 
+
+func pushToRemote(repo *git.Repository) error {
+	// Get current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+	
+	// Check if remote exists
+	_, err = repo.Remote("origin")
+	if err != nil {
+		return fmt.Errorf("no remote 'origin' found: %w", err)
+	}
+	
+	// Push current branch
+	err = repo.Push(&git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(head.Name() + ":" + head.Name()),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to push: %w", err)
+	}
+	
+	return nil
+}
 
 func getGitConfig(key string) string {
 	// Simple fallback - in production you'd want to read from git config
