@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
@@ -265,9 +266,27 @@ func parseCommitOptions(response string) []CommitOption {
 }
 
 func getStagedDiff(repo *git.Repository) (string, error) {
-	// For simplicity, we'll use git command to get diff
-	// In production, you might want to implement proper diff using go-git
-	return "Staged changes detected", nil
+	// Get actual git diff --cached to show staged changes
+	cmd := exec.Command("git", "diff", "--cached")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git diff: %w", err)
+	}
+	
+	diff := string(output)
+	if strings.TrimSpace(diff) == "" {
+		return "No diff available", nil
+	}
+	
+	// Limit diff size to avoid overwhelming AI
+	if len(diff) > 8000 {
+		lines := strings.Split(diff, "\n")
+		if len(lines) > 200 {
+			diff = strings.Join(lines[:200], "\n") + "\n... (diff truncated)"
+		}
+	}
+	
+	return diff, nil
 }
 
 
