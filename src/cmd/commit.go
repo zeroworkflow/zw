@@ -5,11 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
 	zeroconfig "zero-workflow/src/internal/config"
@@ -282,7 +283,7 @@ func getStagedDiff(repo *git.Repository) (string, error) {
 		return "", fmt.Errorf("failed to get HEAD tree: %w", err)
 	}
 
-	// Get worktree
+	// Get worktree and index
 	worktree, err := repo.Worktree()
 	if err != nil {
 		return "", fmt.Errorf("failed to get worktree: %w", err)
@@ -305,42 +306,95 @@ func getStagedDiff(repo *git.Repository) (string, error) {
 		diffOutput.WriteString(fmt.Sprintf("=== %s ===\n", file))
 		diffOutput.WriteString(fmt.Sprintf("Status: %s\n", getStagingStatus(fileStatus.Staging)))
 		
-		// Try to get file content diff
-		if fileStatus.Staging == git.Modified {
-			// Get file from HEAD
-			headFile, err := headTree.File(file)
-			if err == nil {
-				headContent, _ := headFile.Contents()
-				
-				// Get current staged content
-				fs := worktree.Filesystem
-				stagedFile, err := fs.Open(file)
+		// Get staged content from index
+		if fileStatus.Staging == git.Modified || fileStatus.Staging == git.Added {
+			// Get file from HEAD (if exists)
+			var headContent string
+			if fileStatus.Staging == git.Modified {
+				headFile, err := headTree.File(file)
 				if err == nil {
-					stagedBytes := make([]byte, 4096)
-					n, _ := stagedFile.Read(stagedBytes)
-					stagedFile.Close()
-					stagedContent := string(stagedBytes[:n])
-					
-					// Simple diff representation
-					diffOutput.WriteString("Changes:\n")
-					diffOutput.WriteString(fmt.Sprintf("- Old: %d chars\n", len(headContent)))
-					diffOutput.WriteString(fmt.Sprintf("+ New: %d chars\n", len(stagedContent)))
-					
-					// Show first few lines of new content
-					lines := strings.Split(stagedContent, "\n")
-					if len(lines) > 10 {
-						lines = lines[:10]
-						diffOutput.WriteString("New content (first 10 lines):\n")
-					} else {
-						diffOutput.WriteString("New content:\n")
-					}
-					for _, line := range lines {
-						diffOutput.WriteString(fmt.Sprintf("+ %s\n", line))
+					headContent, _ = headFile.Contents()
+				}
+			}
+			
+			// Get staged content from index
+			idx, err := repo.Storer.Index()
+			if err == nil {
+				for _, entry := range idx.Entries {
+					if entry.Name == file {
+						// Get blob content from index
+						obj, err := repo.Storer.EncodedObject(plumbing.BlobObject, entry.Hash)
+						if err == nil {
+							reader, err := obj.Reader()
+							if err == nil {
+								defer reader.Close()
+								
+								var stagedContent strings.Builder
+								buffer := make([]byte, 1024)
+								for {
+									n, err := reader.Read(buffer)
+									if n > 0 {
+										stagedContent.Write(buffer[:n])
+									}
+									if err != nil {
+										break
+									}
+								}
+								
+								stagedStr := stagedContent.String()
+								
+								// Show diff
+								if fileStatus.Staging == git.Modified {
+									diffOutput.WriteString("Changes:\n")
+									diffOutput.WriteString(fmt.Sprintf("- Old: %d chars\n", len(headContent)))
+									diffOutput.WriteString(fmt.Sprintf("+ New: %d chars\n", len(stagedStr)))
+									
+									// Show actual line changes
+									oldLines := strings.Split(headContent, "\n")
+									newLines := strings.Split(stagedStr, "\n")
+									
+									diffOutput.WriteString("Diff:\n")
+									
+									// Simple diff algorithm
+									maxLines := 20
+									changeCount := 0
+									
+									for i := 0; i < len(newLines) && changeCount < maxLines; i++ {
+										if i < len(oldLines) {
+											if oldLines[i] != newLines[i] {
+												diffOutput.WriteString(fmt.Sprintf("-%d: %s\n", i+1, oldLines[i]))
+												diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, newLines[i]))
+												changeCount++
+											}
+										} else {
+											// New line added
+											diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, newLines[i]))
+											changeCount++
+										}
+									}
+									
+									if changeCount >= maxLines {
+										diffOutput.WriteString("... (more changes)\n")
+									}
+								} else {
+									// New file
+									diffOutput.WriteString("New file content:\n")
+									lines := strings.Split(stagedStr, "\n")
+									maxLines := 15
+									if len(lines) > maxLines {
+										lines = lines[:maxLines]
+										diffOutput.WriteString("(showing first 15 lines)\n")
+									}
+									for i, line := range lines {
+										diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, line))
+									}
+								}
+							}
+						}
+						break
 					}
 				}
 			}
-		} else if fileStatus.Staging == git.Added {
-			diffOutput.WriteString("New file added\n")
 		} else if fileStatus.Staging == git.Deleted {
 			diffOutput.WriteString("File deleted\n")
 		}
@@ -395,15 +449,12 @@ func pushToRemote(repo *git.Repository) error {
 		return fmt.Errorf("no remote 'origin' found: %w", err)
 	}
 	
-	// Push current branch
-	err = repo.Push(&git.PushOptions{
-		RemoteName: "origin",
-		RefSpecs: []config.RefSpec{
-			config.RefSpec(head.Name() + ":" + head.Name()),
-		},
-	})
+	// Use system git command for push to leverage existing auth
+	// This avoids authentication issues with go-git
+	cmd := exec.Command("git", "push", "origin", head.Name().Short())
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to push: %w", err)
+		return fmt.Errorf("failed to push: %s", string(output))
 	}
 	
 	return nil
