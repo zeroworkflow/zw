@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"zero-workflow/src/internal/config"
 )
 
@@ -60,30 +61,101 @@ func (c *Client) GenerateText(prompt string) (string, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to make request: %w", err)
+		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Read response body for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	// Parse SSE format response
+	content, err := parseSSEResponse(string(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse SSE response: %w. Raw response: %s", err, string(bodyBytes))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
-	}
+	return content, nil
+}
 
-	if len(response.Choices) == 0 {
-		return "", fmt.Errorf("no response from AI")
+// parseSSEResponse parses Server-Sent Events format response
+func parseSSEResponse(response string) (string, error) {
+	lines := strings.Split(response, "\n")
+	var content strings.Builder
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Skip empty lines and [DONE] markers
+		if line == "" || line == "data: [DONE]" {
+			continue
+		}
+		
+		// Parse data: lines
+		if strings.HasPrefix(line, "data: ") {
+			jsonStr := strings.TrimPrefix(line, "data: ")
+			
+			// Parse the JSON structure
+			var data struct {
+				Type string `json:"type"`
+				Data struct {
+					Data struct {
+						Error struct {
+							Detail string `json:"detail"`
+							Code   int    `json:"code"`
+						} `json:"error"`
+						Done bool `json:"done"`
+					} `json:"data"`
+					Error struct {
+						Detail string `json:"detail"`
+						Code   int    `json:"code"`
+					} `json:"error"`
+					Done bool `json:"done"`
+					Choices []struct {
+						Delta struct {
+							Content string `json:"content"`
+						} `json:"delta"`
+						Message struct {
+							Content string `json:"content"`
+						} `json:"message"`
+					} `json:"choices"`
+				} `json:"data"`
+			}
+			
+			if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+				continue // Skip malformed JSON
+			}
+			
+			// Check for errors
+			if data.Data.Error.Code != 0 {
+				return "", fmt.Errorf("API error %d: %s", data.Data.Error.Code, data.Data.Error.Detail)
+			}
+			if data.Data.Data.Error.Code != 0 {
+				return "", fmt.Errorf("API error %d: %s", data.Data.Data.Error.Code, data.Data.Data.Error.Detail)
+			}
+			
+			// Extract content from choices
+			for _, choice := range data.Data.Choices {
+				if choice.Message.Content != "" {
+					content.WriteString(choice.Message.Content)
+				}
+				if choice.Delta.Content != "" {
+					content.WriteString(choice.Delta.Content)
+				}
+			}
+		}
 	}
-
-	return response.Choices[0].Message.Content, nil
+	
+	result := content.String()
+	if result == "" {
+		return "", fmt.Errorf("no content found in response")
+	}
+	
+	return result, nil
 }
