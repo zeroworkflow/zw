@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
@@ -266,27 +265,120 @@ func parseCommitOptions(response string) []CommitOption {
 }
 
 func getStagedDiff(repo *git.Repository) (string, error) {
-	// Get actual git diff --cached to show staged changes
-	cmd := exec.Command("git", "diff", "--cached")
-	output, err := cmd.Output()
+	// Get HEAD commit
+	head, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf("failed to get git diff: %w", err)
+		return "", fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD commit: %w", err)
+	}
+
+	// Get HEAD tree
+	headTree, err := headCommit.Tree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD tree: %w", err)
+	}
+
+	// Get worktree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get status to find staged files
+	status, err := worktree.Status()
+	if err != nil {
+		return "", fmt.Errorf("failed to get status: %w", err)
+	}
+
+	var diffOutput strings.Builder
+	
+	// Process each staged file
+	for file, fileStatus := range status {
+		if fileStatus.Staging == git.Unmodified {
+			continue
+		}
+		
+		diffOutput.WriteString(fmt.Sprintf("=== %s ===\n", file))
+		diffOutput.WriteString(fmt.Sprintf("Status: %s\n", getStagingStatus(fileStatus.Staging)))
+		
+		// Try to get file content diff
+		if fileStatus.Staging == git.Modified {
+			// Get file from HEAD
+			headFile, err := headTree.File(file)
+			if err == nil {
+				headContent, _ := headFile.Contents()
+				
+				// Get current staged content
+				fs := worktree.Filesystem
+				stagedFile, err := fs.Open(file)
+				if err == nil {
+					stagedBytes := make([]byte, 4096)
+					n, _ := stagedFile.Read(stagedBytes)
+					stagedFile.Close()
+					stagedContent := string(stagedBytes[:n])
+					
+					// Simple diff representation
+					diffOutput.WriteString("Changes:\n")
+					diffOutput.WriteString(fmt.Sprintf("- Old: %d chars\n", len(headContent)))
+					diffOutput.WriteString(fmt.Sprintf("+ New: %d chars\n", len(stagedContent)))
+					
+					// Show first few lines of new content
+					lines := strings.Split(stagedContent, "\n")
+					if len(lines) > 10 {
+						lines = lines[:10]
+						diffOutput.WriteString("New content (first 10 lines):\n")
+					} else {
+						diffOutput.WriteString("New content:\n")
+					}
+					for _, line := range lines {
+						diffOutput.WriteString(fmt.Sprintf("+ %s\n", line))
+					}
+				}
+			}
+		} else if fileStatus.Staging == git.Added {
+			diffOutput.WriteString("New file added\n")
+		} else if fileStatus.Staging == git.Deleted {
+			diffOutput.WriteString("File deleted\n")
+		}
+		
+		diffOutput.WriteString("\n")
 	}
 	
-	diff := string(output)
-	if strings.TrimSpace(diff) == "" {
-		return "No diff available", nil
+	result := diffOutput.String()
+	if strings.TrimSpace(result) == "" {
+		return "No staged changes found", nil
 	}
 	
 	// Limit diff size to avoid overwhelming AI
-	if len(diff) > 8000 {
-		lines := strings.Split(diff, "\n")
+	if len(result) > 8000 {
+		lines := strings.Split(result, "\n")
 		if len(lines) > 200 {
-			diff = strings.Join(lines[:200], "\n") + "\n... (diff truncated)"
+			result = strings.Join(lines[:200], "\n") + "\n... (diff truncated)"
 		}
 	}
 	
-	return diff, nil
+	return result, nil
+}
+
+func getStagingStatus(status git.StatusCode) string {
+	switch status {
+	case git.Added:
+		return "Added"
+	case git.Modified:
+		return "Modified"
+	case git.Deleted:
+		return "Deleted"
+	case git.Renamed:
+		return "Renamed"
+	case git.Copied:
+		return "Copied"
+	default:
+		return "Unknown"
+	}
 }
 
 
