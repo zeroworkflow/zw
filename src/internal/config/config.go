@@ -76,6 +76,12 @@ func DefaultUserContext() *UserContext {
 	}
 }
 
+// Load loads configuration
+func Load() (*Config, error) {
+	LoadEnv()
+	return DefaultConfig(), nil
+}
+
 // GetToken retrieves AI token from environment
 func GetToken() (string, error) {
 	// Try to load .env file first
