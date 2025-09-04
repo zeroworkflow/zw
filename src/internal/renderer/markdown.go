@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
 )
 
@@ -87,62 +88,37 @@ func (r *MarkdownRenderer) highlightCode(code, lang string) string {
 	return buf.String()
 }
 
-// formatCodeBlock formats a code block with borders and language label
+// formatCodeBlock formats a code block with borders and language label using lipgloss
 func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
-	var result strings.Builder
-	
 	// Clean up code - remove ANSI escape sequences if any
 	cleanCode := r.stripAnsiCodes(code)
-	lines := strings.Split(cleanCode, "\n")
 	
-	// Calculate max line length for proper border sizing
-	maxLen := 0
-	for _, line := range lines {
-		if len(line) > maxLen {
-			maxLen = len(line)
-		}
-	}
+	// Create lipgloss style for code block
+	codeStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("6")). // Cyan
+		Padding(0, 1).
+		MarginTop(1).
+		MarginBottom(1)
 	
-	// Minimum width of 40, maximum of 80
-	borderWidth := maxLen + 4
-	if borderWidth < 44 {
-		borderWidth = 44
-	}
-	if borderWidth > 84 {
-		borderWidth = 84
-	}
-	
-	borderColor := color.New(color.FgCyan, color.Bold)
-	
-	// Top border with language label
-	topBorder := "┌"
+	// Add language label if provided
 	if lang != "" {
-		langLabel := " " + lang + " "
-		topBorder += "─" + langLabel + strings.Repeat("─", borderWidth-len(langLabel)-3) + "┐"
-	} else {
-		topBorder += strings.Repeat("─", borderWidth-2) + "┐"
-	}
-	
-	result.WriteString(borderColor.Sprint(topBorder) + "\n")
-	
-	// Code content with side borders
-	contentWidth := borderWidth - 4 // Account for "│ " and " │"
-	for _, line := range lines {
-		// Truncate if too long
-		if len(line) > contentWidth {
-			line = line[:contentWidth-3] + "..."
-		}
+		// Create header with language
+		headerStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("6")). // Cyan
+			Bold(true).
+			Padding(0, 1)
 		
-		// Pad to content width
-		paddedLine := line + strings.Repeat(" ", contentWidth-len(line))
-		result.WriteString(borderColor.Sprint("│ ") + paddedLine + borderColor.Sprint(" │") + "\n")
+		header := headerStyle.Render(lang)
+		
+		// Combine header and code
+		return lipgloss.JoinVertical(lipgloss.Left,
+			header,
+			codeStyle.Render(cleanCode),
+		)
 	}
 	
-	// Bottom border
-	bottomBorder := "└" + strings.Repeat("─", borderWidth-2) + "┘"
-	result.WriteString(borderColor.Sprint(bottomBorder) + "\n")
-	
-	return result.String()
+	return codeStyle.Render(cleanCode)
 }
 
 // stripAnsiCodes removes ANSI escape sequences from text
