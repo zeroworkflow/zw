@@ -8,7 +8,6 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
 )
 
@@ -88,7 +87,7 @@ func (r *MarkdownRenderer) highlightCode(code, lang string) string {
 	return buf.String()
 }
 
-// formatCodeBlock formats a code block with borders and language label using lipgloss
+// formatCodeBlock formats a code block with borders and language label using simple borders
 func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	// Apply syntax highlighting first if language is specified
 	highlightedCode := code
@@ -96,32 +95,62 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 		highlightedCode = r.highlightCode(code, lang)
 	}
 	
-	// Create lipgloss style for code block
-	codeStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("6")). // Cyan
-		Padding(0, 1).
-		MarginTop(1).
-		MarginBottom(1)
+	// Split into lines for border rendering
+	lines := strings.Split(highlightedCode, "\n")
 	
-	// Add language label if provided
-	if lang != "" {
-		// Create header with language
-		headerStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("6")). // Cyan
-			Bold(true).
-			Padding(0, 1)
-		
-		header := headerStyle.Render(lang)
-		
-		// Combine header and code
-		return lipgloss.JoinVertical(lipgloss.Left,
-			header,
-			codeStyle.Render(highlightedCode),
-		)
+	// Calculate max display width (accounting for ANSI codes)
+	maxWidth := 0
+	for _, line := range lines {
+		displayWidth := r.getDisplayWidth(line)
+		if displayWidth > maxWidth {
+			maxWidth = displayWidth
+		}
 	}
 	
-	return codeStyle.Render(highlightedCode)
+	// Minimum width of 40, maximum of 80
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+	if maxWidth > 80 {
+		maxWidth = 80
+	}
+	
+	var result strings.Builder
+	
+	// Top border with language
+	if lang != "" {
+		langLabel := " " + lang + " "
+		topBorder := "╭─" + langLabel + strings.Repeat("─", maxWidth-len(langLabel)-2) + "╮"
+		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
+	} else {
+		topBorder := "╭" + strings.Repeat("─", maxWidth) + "╮"
+		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
+	}
+	
+	// Content lines
+	for _, line := range lines {
+		displayWidth := r.getDisplayWidth(line)
+		padding := maxWidth - displayWidth
+		if padding < 0 {
+			padding = 0
+		}
+		
+		result.WriteString(color.New(color.FgCyan).Sprint("│ ") + line + 
+			strings.Repeat(" ", padding) + color.New(color.FgCyan).Sprint(" │") + "\n")
+	}
+	
+	// Bottom border
+	bottomBorder := "╰" + strings.Repeat("─", maxWidth) + "╯"
+	result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(bottomBorder) + "\n")
+	
+	return result.String()
+}
+
+// getDisplayWidth calculates the display width of a string, ignoring ANSI escape sequences
+func (r *MarkdownRenderer) getDisplayWidth(text string) int {
+	// Remove ANSI escape sequences for width calculation
+	cleaned := r.stripAnsiCodes(text)
+	return len(cleaned)
 }
 
 // stripAnsiCodes removes ANSI escape sequences from text
