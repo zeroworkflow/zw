@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -92,35 +91,65 @@ func (r *MarkdownRenderer) highlightCode(code, lang string) string {
 func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	var result strings.Builder
 	
-	// Top border with language label
-	borderColor := color.New(color.FgCyan, color.Bold)
-	langLabel := ""
-	if lang != "" {
-		langLabel = fmt.Sprintf(" %s ", lang)
+	// Clean up code - remove ANSI escape sequences if any
+	cleanCode := r.stripAnsiCodes(code)
+	lines := strings.Split(cleanCode, "\n")
+	
+	// Calculate max line length for proper border sizing
+	maxLen := 0
+	for _, line := range lines {
+		if len(line) > maxLen {
+			maxLen = len(line)
+		}
 	}
 	
-	topBorder := "┌" + strings.Repeat("─", 60) + "┐"
+	// Minimum width of 40, maximum of 80
+	borderWidth := maxLen + 4
+	if borderWidth < 44 {
+		borderWidth = 44
+	}
+	if borderWidth > 84 {
+		borderWidth = 84
+	}
+	
+	borderColor := color.New(color.FgCyan, color.Bold)
+	
+	// Top border with language label
+	topBorder := "┌"
 	if lang != "" {
-		topBorder = "┌─" + langLabel + strings.Repeat("─", 60-len(langLabel)-2) + "┐"
+		langLabel := " " + lang + " "
+		topBorder += "─" + langLabel + strings.Repeat("─", borderWidth-len(langLabel)-3) + "┐"
+	} else {
+		topBorder += strings.Repeat("─", borderWidth-2) + "┐"
 	}
 	
 	result.WriteString(borderColor.Sprint(topBorder) + "\n")
 	
 	// Code content with side borders
-	lines := strings.Split(code, "\n")
+	contentWidth := borderWidth - 4 // Account for "│ " and " │"
 	for _, line := range lines {
-		// Pad line to fit within borders
-		if len(line) > 58 {
-			line = line[:58]
+		// Truncate if too long
+		if len(line) > contentWidth {
+			line = line[:contentWidth-3] + "..."
 		}
-		result.WriteString(borderColor.Sprint("│ ") + line + borderColor.Sprint(strings.Repeat(" ", 58-len(line)) + " │") + "\n")
+		
+		// Pad to content width
+		paddedLine := line + strings.Repeat(" ", contentWidth-len(line))
+		result.WriteString(borderColor.Sprint("│ ") + paddedLine + borderColor.Sprint(" │") + "\n")
 	}
 	
 	// Bottom border
-	bottomBorder := "└" + strings.Repeat("─", 60) + "┘"
+	bottomBorder := "└" + strings.Repeat("─", borderWidth-2) + "┘"
 	result.WriteString(borderColor.Sprint(bottomBorder) + "\n")
 	
 	return result.String()
+}
+
+// stripAnsiCodes removes ANSI escape sequences from text
+func (r *MarkdownRenderer) stripAnsiCodes(text string) string {
+	// Regex to match ANSI escape sequences
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	return ansiRegex.ReplaceAllString(text, "")
 }
 
 // processMarkdownElements processes other markdown elements like bold, italic, etc.

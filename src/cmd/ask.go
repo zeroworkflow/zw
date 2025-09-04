@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/ai"
 	"zero-workflow/src/internal/renderer"
@@ -53,9 +55,25 @@ func runAsk(cmd *cobra.Command, args []string) {
 }
 
 func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, question string) {
-	fmt.Printf("🤖 Thinking...\n\n")
+	// Create custom spinner with thinking text and dots animation
+	s := spinner.New([]string{
+		"Thinking.   [|]",
+		"Thinking..  [/]", 
+		"Thinking... [-]",
+		"Thinking.   [\\]",
+		"Thinking..  [|]",
+		"Thinking... [/]",
+		"Thinking.   [-]",
+		"Thinking..  [\\]",
+	}, 200*time.Millisecond)
+	
+	s.Start()
 	
 	response, err := client.Chat(question)
+	
+	s.Stop()
+	fmt.Print("\r\033[K") // Clear the spinner line
+	
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -68,7 +86,7 @@ func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, questio
 }
 
 func runInteractiveMode(client *ai.Client, renderer *renderer.MarkdownRenderer) {
-	fmt.Println("🚀 ZeroWorkflow AI - Interactive Mode")
+	fmt.Println("ZeroWorkflow AI - Interactive Mode")
 	fmt.Println("Type your questions and press Enter. Type 'exit' or 'quit' to leave.")
 	fmt.Println(strings.Repeat("─", 60))
 	
@@ -88,7 +106,7 @@ func runInteractiveMode(client *ai.Client, renderer *renderer.MarkdownRenderer) 
 		}
 		
 		if input == "exit" || input == "quit" {
-			fmt.Println("👋 Goodbye!")
+			fmt.Println("Goodbye!")
 			break
 		}
 		
