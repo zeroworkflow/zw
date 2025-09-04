@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/ai"
 	"zero-workflow/src/internal/renderer"
+	"zero-workflow/src/internal/ui"
 )
 
 var (
@@ -55,24 +54,13 @@ func runAsk(cmd *cobra.Command, args []string) {
 }
 
 func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, question string) {
-	// Create custom spinner with thinking text and dots animation
-	s := spinner.New([]string{
-		"Thinking.   [|]",
-		"Thinking..  [/]", 
-		"Thinking... [-]",
-		"Thinking.   [\\]",
-		"Thinking..  [|]",
-		"Thinking... [/]",
-		"Thinking.   [-]",
-		"Thinking..  [\\]",
-	}, 200*time.Millisecond)
-	
-	s.Start()
+	// Create right-aligned spinner
+	spinner := ui.NewRightSpinner("Thinking")
+	spinner.Start()
 	
 	response, err := client.Chat(question)
 	
-	s.Stop()
-	fmt.Print("\r\033[K") // Clear the spinner line
+	spinner.Stop()
 	
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
