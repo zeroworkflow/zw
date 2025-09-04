@@ -90,8 +90,11 @@ func (r *MarkdownRenderer) highlightCode(code, lang string) string {
 
 // formatCodeBlock formats a code block with borders and language label using lipgloss
 func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
-	// Clean up code - remove ANSI escape sequences if any
-	cleanCode := r.stripAnsiCodes(code)
+	// Apply syntax highlighting first if language is specified
+	highlightedCode := code
+	if lang != "" {
+		highlightedCode = r.highlightCode(code, lang)
+	}
 	
 	// Create lipgloss style for code block
 	codeStyle := lipgloss.NewStyle().
@@ -114,11 +117,11 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 		// Combine header and code
 		return lipgloss.JoinVertical(lipgloss.Left,
 			header,
-			codeStyle.Render(cleanCode),
+			codeStyle.Render(highlightedCode),
 		)
 	}
 	
-	return codeStyle.Render(cleanCode)
+	return codeStyle.Render(highlightedCode)
 }
 
 // stripAnsiCodes removes ANSI escape sequences from text
