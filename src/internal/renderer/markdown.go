@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/fatih/color"
+	"github.com/mattn/go-runewidth"
 )
 
 type MarkdownRenderer struct {
@@ -106,41 +107,43 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 		}
 	}
 	
-	// Add padding for borders and ensure minimum width
-	contentWidth := maxWidth + 2 // +2 for left/right padding
-	if contentWidth < 44 {
-		contentWidth = 44
+	// Determine inner content width (visible code area between the two inner spaces)
+	innerWidth := maxWidth
+	if innerWidth < 40 {
+		innerWidth = 40
 	}
-	if contentWidth > 84 {
-		contentWidth = 84
+	if innerWidth > 80 {
+		innerWidth = 80
 	}
+	// Total width of the box including borders and inner spaces: "│ " + content + " │"
+	totalWidth := innerWidth + 4
 	
 	var result strings.Builder
 	
 	// Top border with language
 	if lang != "" {
 		langLabel := " " + lang + " "
-		topBorder := "╭─" + langLabel + strings.Repeat("─", contentWidth-len(langLabel)-3) + "╮"
+		// "╭─" + label + repeat + "╮" -> totalWidth should match the interior width
+		topBorder := "╭─" + langLabel + strings.Repeat("─", totalWidth-len(langLabel)-3) + "╮"
 		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
 	} else {
-		topBorder := "╭" + strings.Repeat("─", contentWidth-2) + "╮"
+		topBorder := "╭" + strings.Repeat("─", totalWidth-2) + "╮"
 		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
 	}
 	
 	// Content lines
 	for _, line := range lines {
 		displayWidth := r.getDisplayWidth(line)
-		padding := contentWidth - displayWidth - 4 // -4 for "│ " and " │"
+		padding := innerWidth - displayWidth
 		if padding < 0 {
 			padding = 0
 		}
-		
-		result.WriteString(color.New(color.FgCyan).Sprint("│ ") + line + 
+		result.WriteString(color.New(color.FgCyan).Sprint("│ ") + line +
 			strings.Repeat(" ", padding) + color.New(color.FgCyan).Sprint(" │") + "\n")
 	}
 	
 	// Bottom border
-	bottomBorder := "╰" + strings.Repeat("─", contentWidth-2) + "╯"
+	bottomBorder := "╰" + strings.Repeat("─", totalWidth-2) + "╯"
 	result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(bottomBorder) + "\n")
 	
 	return result.String()
@@ -150,7 +153,10 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 func (r *MarkdownRenderer) getDisplayWidth(text string) int {
 	// Remove ANSI escape sequences for width calculation
 	cleaned := r.stripAnsiCodes(text)
-	return len(cleaned)
+	// Expand tabs to 4 spaces to stabilize width
+	cleaned = strings.ReplaceAll(cleaned, "\t", "    ")
+	// Use runewidth to account for Unicode display width
+	return runewidth.StringWidth(cleaned)
 }
 
 // stripAnsiCodes removes ANSI escape sequences from text
