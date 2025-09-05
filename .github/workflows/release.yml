@@ -64,10 +64,10 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: 🔍 Verify dependencies
-      run: cd src && go mod verify
+      run: go mod verify
 
     - name: 🧪 Run tests
-      run: cd src && go test -v ./...
+      run: go test -v ./src/...
 
     - name: 🏗️ Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
       env:
@@ -75,7 +75,7 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
       run: |
-        cd src && go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../${{ matrix.name }} .
+        go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ${{ matrix.name }} ./src
 
     - name: 📋 Generate checksums
       run: |
