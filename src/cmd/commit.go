@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/go-git/go-git/v5"
@@ -127,6 +128,7 @@ func runCommit(cmd *cobra.Command, args []string) error {
 		Author: &object.Signature{
 			Name:  getGitConfig("user.name"),
 			Email: getGitConfig("user.email"),
+			When:  time.Now(),
 		},
 	})
 	if err != nil {
@@ -461,13 +463,25 @@ func pushToRemote(repo *git.Repository) error {
 }
 
 func getGitConfig(key string) string {
-	// Simple fallback - in production you'd want to read from git config
-	switch key {
-	case "user.name":
-		return "Developer"
-	case "user.email":
-		return "developer@example.com"
-	default:
-		return ""
+	// Read actual git config
+	cmd := exec.Command("git", "config", "--global", key)
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback to local config if global fails
+		cmd = exec.Command("git", "config", key)
+		output, err = cmd.Output()
+		if err != nil {
+			// Final fallbacks
+			switch key {
+			case "user.name":
+				return "Developer"
+			case "user.email":
+				return "developer@example.com"
+			default:
+				return ""
+			}
+		}
 	}
+	
+	return strings.TrimSpace(string(output))
 }
