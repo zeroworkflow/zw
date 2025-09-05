@@ -33,7 +33,7 @@ ZeroWorkflow — это коллекция утилит командной ст�
 #### Быстрая установка 
 ```bash
 # Скачать и установить последнюю версию
-curl -L https://github.com/zeroworkflow/zw/releases/download/v1.0.9/install.sh | bash
+curl -L https://raw.githubusercontent.com/zeroworkflow/zw/refs/heads/main/install.sh | bash
 ```
 
 ### Настройка
