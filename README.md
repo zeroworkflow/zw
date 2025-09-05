@@ -6,7 +6,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-brightgreen?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.0.1-?style=flat-square)](https://github.com/derxanax/ZeroWorkflow/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.0-purple?style=flat-square)](https://github.com/derxanax/ZeroWorkflow/releases)
 
 > AI-powered developer tools suite for streamlined workflow automation
 
@@ -26,7 +26,7 @@ ZeroWorkflow is a collection of AI-powered command-line utilities designed to au
 [![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
 [![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows/)
 
-## 🚀 Quick Start
+## ⚡️ Quick Start
 
 ### Installation
 
@@ -36,18 +36,6 @@ ZeroWorkflow is a collection of AI-powered command-line utilities designed to au
 curl -L https://github.com/zeroworkflow/zw/releases/download/v1.0.9/install.sh | bash
 ```
 
-#### Manual Download
-Download the binary for your platform from [Releases](https://github.com/zeroworkflow/zw/releases/latest):
-- **Linux AMD64**: `zw-linux-amd64`
-
-```bash
-# Download binary
-curl -L -o zw https://github.com/zeroworkflow/zw/releases/download/v1.0.9/zw-linux-amd64
-
-# Make executable and install
-chmod +x zw
-sudo mv zw /usr/local/bin/
-```
 ### Setup
 
 1. **Automatic setup** :
@@ -78,37 +66,37 @@ zw ask -i
 ```
 
 **Features:**
-- ✨ Syntax highlighting for code blocks
-- 📝 Rich markdown rendering
-- 🔄 Interactive conversation mode
-- 📁 **File context support** - Include files for AI analysis
-- 🎨 Beautiful terminal formatting
-- 🛡️ Safe file handling with size limits
+- [I] Syntax highlighting for code blocks
+- ! Rich markdown rendering
+- @ Interactive conversation mode
+- ! **File context support** - Include files for AI analysis
+- [I] Beautiful terminal formatting
+- ! Safe file handling with size limits
 
-## 📁 Project Structure
+## 💼 Project Structure
 
 ```text
 ZeroWorkflow/
 ├── src/                   # Source code
 │   ├── cmd/               # CLI commands
 │   │   ├── root.go        # Root command setup
-│   │   └── ask.go         # AI assistant command
+│   │   └── ask.go         
 │   ├── internal/          # Internal packages
 │   │   ├── ai/            # AI client implementation
-│   │   │   └── client.go  # Z.ai API client
-│   │   └── renderer/      # Output rendering
-│   │       └── markdown.go # Markdown renderer with syntax highlighting
+│   │   │   └── client.go 
+│   │   └── renderer/      
+│   │       └── markdown.go
 │   └── main.go            # Application entry point
-├── assets/                # Static assets
-│   └── image/logo/        # Logo files
-├── doc/                   # Documentation
-│   ├── lang/              # Localized documentation
-│   └── ask.md             # Command documentation
+├── assets/                
+│   └── image/logo/        
+├── doc/                   
+│   ├── lang/              
+│   └── ask.md             
 ├── go.mod                 # Go module definition
-└── .env                   # Environment variables (create manually)
+└── .env                   
 ```
 
-## 🔧 Development
+## 🪵 Development
 
 ### Prerequisites
 - Go 1.21 or higher
@@ -116,7 +104,7 @@ ZeroWorkflow/
 
 ### Building from Source
 
-#### Using Makefile (Recommended)
+#### Using Makefile 
 ```bash
 # Clone repository
 git clone https://github.com/derxanax/ZeroWorkflow.git
@@ -141,12 +129,6 @@ make dev
 3. Register with root command
 4. Add documentation
 
-## 📚 Documentation
-
-- [Command Reference](doc/commands.md) - Complete command documentation
-- [AI Assistant Guide](doc/ask.md) - Detailed guide for the ask command
-- [Configuration](doc/config.md) - Environment setup and configuration
-- [Contributing](doc/contributing.md) - Development guidelines
 
 ## 📄 License
 
