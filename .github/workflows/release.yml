@@ -82,6 +82,8 @@ jobs:
 
     - name: 📥 Download all artifacts
       uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
 
     - name: 📋 Generate changelog
       id: changelog
@@ -135,7 +137,7 @@ jobs:
         echo "## 🔐 Checksums" >> CHANGELOG.md
         echo "Verify your downloads:" >> CHANGELOG.md
         echo '```' >> CHANGELOG.md
-        for file in zw-linux-amd64/*.sha256; do
+        for file in *.sha256; do
           if [ -f "$file" ]; then
             cat "$file" >> CHANGELOG.md
           fi
@@ -151,8 +153,8 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          zw-linux-amd64/zw-linux-amd64
-          zw-linux-amd64/zw-linux-amd64.sha256
+          zw-linux-amd64
+          zw-linux-amd64.sha256
         generate_release_notes: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
