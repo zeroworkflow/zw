@@ -32,7 +32,7 @@ ZeroWorkflow is a collection of AI-powered command-line utilities designed to au
 #### Quick Install (Recommended)
 ```bash
 # Download and install the latest release
-curl -L https://github.com/zeroworkflow/zw/releases/download/v1.0.9/install.sh | bash
+curl -L https://raw.githubusercontent.com/zeroworkflow/zw/refs/heads/main/install.sh | bash
 ```
 
 ### Setup
