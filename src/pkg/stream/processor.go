@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	DefaultBufferSize = 8192
-	MaxBufferSize     = 65536
+	DefaultBufferSize = 64 * 1024
+	MaxBufferSize     = 2 * 1024 * 1024
 )
 
 // StreamChunk represents a streaming response chunk

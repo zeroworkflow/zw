@@ -90,21 +90,31 @@ func GetToken() (string, error) {
 
 // LoadEnv loads environment variables from .env file if it exists
 func LoadEnv() error {
-	// Try to find .env file in current directory and parent directories
-	envPaths := []string{
-		".env",
-		"../.env",
-		"../../.env",
-	}
+    // Try to find .env file in current directory, parent directories, and XDG/HOME config locations
+    envPaths := []string{
+        ".env",
+        "../.env",
+        "../../.env",
+    }
 
-	for _, envPath := range envPaths {
-		if _, err := os.Stat(envPath); err == nil {
-			if err := godotenv.Load(envPath); err != nil {
-				return fmt.Errorf("failed to load %s: %w", envPath, err)
-			}
-			return nil
-		}
-	}
+    // XDG config path: $XDG_CONFIG_HOME/zw/.env
+    if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+        envPaths = append(envPaths, filepath.Join(xdg, "zw", ".env"))
+    }
+
+    // HOME config path: $HOME/.config/zw/.env
+    if home := os.Getenv("HOME"); home != "" {
+        envPaths = append(envPaths, filepath.Join(home, ".config", "zw", ".env"))
+    }
+
+    for _, envPath := range envPaths {
+        if _, err := os.Stat(envPath); err == nil {
+            if err := godotenv.Load(envPath); err != nil {
+                return fmt.Errorf("failed to load %s: %w", envPath, err)
+            }
+            return nil
+        }
+    }
 
 	// Try to find .env in executable directory
 	execPath, err := os.Executable()
