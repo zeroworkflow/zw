@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/config"
 	"zero-workflow/src/internal/files"
+	"zero-workflow/src/internal/handlers"
 	"zero-workflow/src/internal/renderer"
-	"zero-workflow/src/internal/ui"
 	"zero-workflow/src/pkg/ai/zai"
 )
 
@@ -42,105 +42,111 @@ func init() {
 }
 
 func runAsk(cmd *cobra.Command, args []string) {
+	errorHandler := handlers.NewErrorHandler()
+	
 	token, err := config.GetToken()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		errorHandler.HandleFatalError(err, "token retrieval")
 	}
 
 	client, err := zai.NewClient(token)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating AI client: %v\n", err)
-		os.Exit(1)
+		errorHandler.HandleFatalError(err, "AI client creation")
 	}
 
 	renderer := renderer.NewMarkdownRenderer()
 
 	if interactive {
-		runInteractiveMode(client, renderer)
+		runInteractiveMode(client, renderer, errorHandler)
 		return
 	}
 
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Please provide a question or use -i for interactive mode\n")
-		fmt.Fprintf(os.Stderr, "Usage: zw ask \"your question\" or zw ask -i\n")
-		os.Exit(1)
+		errorHandler.HandleFatalError(fmt.Errorf("please provide a question or use -i for interactive mode"), "argument validation")
 	}
 
 	question := strings.Join(args, " ")
-	askQuestion(client, renderer, question, fileList)
+	askQuestion(client, renderer, question, fileList, errorHandler)
 }
 
-func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string, filePaths []string) {
-    // Fixed top-right spinner during real streaming
-    spinner := ui.NewRightSpinner("Thinking")
-    spinner.Start()
-
+func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string, filePaths []string, errorHandler *handlers.ErrorHandler) {
+    spinnerHandler := handlers.NewSpinnerHandler("Thinking")
     var rawBuilder strings.Builder
 
-    // Process files if provided
-    var fileContext string
-    if len(filePaths) > 0 {
-        fileReader := files.NewReader()
-        
-        // Validate files first
-        if err := fileReader.ValidateFiles(filePaths); err != nil {
-            spinner.Stop()
-            fmt.Fprintf(os.Stderr, "\nFile validation error: %v\n", err)
-            os.Exit(1)
-        }
-        
-        // Read files
-        fileContents, err := fileReader.ReadFiles(filePaths)
+    err := spinnerHandler.WithSpinner(func() error {
+        // Process files if provided
+        fileContext, err := processFiles(filePaths, errorHandler)
         if err != nil {
-            spinner.Stop()
-            fmt.Fprintf(os.Stderr, "\nError reading files: %v\n", err)
-            os.Exit(1)
+            return err
         }
         
-        fileContext = fileReader.FormatFilesForAI(fileContents)
-        fmt.Printf("\n[*] Loaded %d file(s) for context\n", len(fileContents))
-    }
-    
-    // Combine question with file context
-    fullQuestion := question + fileContext
-    
-    // Stream deltas and print them as raw text during streaming
-    ctx := context.Background()
-    response, err := client.ChatStream(ctx, fullQuestion, func(delta string) {
-        rawBuilder.WriteString(delta)
-        fmt.Print(delta)
+        // Combine question with file context
+        fullQuestion := question + fileContext
+        
+        // Stream deltas and print them as raw text during streaming
+        ctx := context.Background()
+        response, err := client.ChatStream(ctx, fullQuestion, func(delta string) {
+            rawBuilder.WriteString(delta)
+            fmt.Print(delta)
+        })
+
+        if err != nil {
+            return err
+        }
+
+        // After streaming is complete, replace raw output with rendered markdown
+        if response != "" {
+            renderFinalOutput(&rawBuilder, renderer, response)
+        }
+        
+        return nil
     })
 
-    // Stop spinner
-    spinner.Stop()
-
     if err != nil {
-        fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
-        os.Exit(1)
-    }
-
-    // After streaming is complete, replace raw output with rendered markdown
-    if response != "" {
-        // Count lines in the raw output to know how much to clear
-        rawOutput := rawBuilder.String()
-        lines := strings.Count(rawOutput, "\n")
-        
-        // Move cursor up and clear the raw output
-        if lines > 0 {
-            fmt.Printf("\x1b[%dA", lines)
-        }
-        fmt.Print("\r\x1b[J")
-        
-        // Print the beautifully rendered version
-        finalRendered := renderer.RenderMarkdown(response)
-        fmt.Print(finalRendered)
+        errorHandler.HandleFatalError(err, "question processing")
     }
     
     fmt.Println("")
 }
 
-func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer) {
+// processFiles handles file processing logic
+func processFiles(filePaths []string, errorHandler *handlers.ErrorHandler) (string, error) {
+    if len(filePaths) == 0 {
+        return "", nil
+    }
+
+    fileReader := files.NewReader()
+    
+    if err := fileReader.ValidateFiles(filePaths); err != nil {
+        return "", fmt.Errorf("file validation error: %w", err)
+    }
+    
+    fileContents, err := fileReader.ReadFiles(filePaths)
+    if err != nil {
+        return "", fmt.Errorf("error reading files: %w", err)
+    }
+    
+    fmt.Printf("\n[*] Loaded %d file(s) for context\n", len(fileContents))
+    return fileReader.FormatFilesForAI(fileContents), nil
+}
+
+// renderFinalOutput handles the final markdown rendering
+func renderFinalOutput(rawBuilder *strings.Builder, renderer *renderer.MarkdownRenderer, response string) {
+    rawOutput := rawBuilder.String()
+    lines := strings.Count(rawOutput, "\n")
+    
+    // Move cursor up and clear the raw output
+    if lines > 0 {
+        fmt.Printf("\x1b[%dA", lines)
+    }
+    fmt.Print("\r\x1b[J")
+    
+    // Print the beautifully rendered version
+    finalRendered := renderer.RenderMarkdown(response)
+    fmt.Print(finalRendered)
+}
+
+func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer, errorHandler *handlers.ErrorHandler) {
 	fmt.Println("ZeroWorkflow AI - Interactive Mode")
 	fmt.Println("Type your questions and press Enter. Type 'exit' or 'quit' to leave.")
 	fmt.Println(strings.Repeat("─", 60))
@@ -166,11 +172,10 @@ func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer)
 		}
 		
 		// In interactive mode, files are not supported yet
-		askQuestion(client, renderer, input, []string{})
+		askQuestion(client, renderer, input, []string{}, errorHandler)
 	}
 	
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-		os.Exit(1)
+		errorHandler.HandleFatalError(err, "input reading")
 	}
 }

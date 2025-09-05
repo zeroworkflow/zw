@@ -44,6 +44,13 @@ type StreamProcessor interface {
 	ProcessStream(reader interface{}, callback types.StreamCallback) (string, error)
 }
 
+// Provider defines the interface for AI providers
+type Provider interface {
+	CreateClient(token string) (AIClient, error)
+	ValidateToken(token string) error
+	GetName() string
+}
+
 // ConfigProvider provides configuration
 type ConfigProvider interface {
 	GetAPIURL() string

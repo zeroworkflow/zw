@@ -223,16 +223,60 @@ func (r *Reader) ValidateFiles(filePaths []string) error {
 	}
 
 	for _, path := range filePaths {
-		if strings.TrimSpace(path) == "" {
-			return fmt.Errorf("empty file path")
-		}
-
-		// Security check - prevent path traversal
-		cleanPath := filepath.Clean(path)
-		if strings.Contains(cleanPath, "..") {
-			return fmt.Errorf("path traversal not allowed: %s", path)
+		if err := r.validateSinglePath(path); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// validateSinglePath performs comprehensive path validation
+func (r *Reader) validateSinglePath(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("empty file path")
+	}
+
+	// Normalize path
+	cleanPath := filepath.Clean(path)
+	
+	// Check for path traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return fmt.Errorf("path traversal not allowed: %s", path)
+	}
+	
+	// Check for absolute paths outside current directory
+	if filepath.IsAbs(cleanPath) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("cannot determine current directory: %w", err)
+		}
+		
+		rel, err := filepath.Rel(cwd, cleanPath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("absolute path outside current directory not allowed: %s", path)
+		}
+	}
+	
+	// Check for dangerous file extensions
+	ext := strings.ToLower(filepath.Ext(cleanPath))
+	dangerousExts := []string{".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".vbs", ".js"}
+	for _, dangerous := range dangerousExts {
+		if ext == dangerous {
+			return fmt.Errorf("potentially dangerous file type not allowed: %s", ext)
+		}
+	}
+	
+	// Check for system/hidden files
+	base := filepath.Base(cleanPath)
+	if strings.HasPrefix(base, ".") && base != ".env" && base != ".gitignore" {
+		return fmt.Errorf("hidden files not allowed: %s", path)
+	}
+	
+	// Check path length
+	if len(cleanPath) > 260 {
+		return fmt.Errorf("path too long (max 260 characters): %s", path)
+	}
+	
 	return nil
 }

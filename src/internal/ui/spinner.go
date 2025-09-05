@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -13,46 +15,71 @@ type RightSpinner struct {
 	frames   []string
 	text     string
 	active   bool
-	stopChan chan bool
-	doneChan chan bool
+	mu       sync.RWMutex
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
 	lastLen  int
 }
 
 func NewRightSpinner(text string) *RightSpinner {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &RightSpinner{
-		frames:   []string{"|", "/", "-", "\\"},
-		text:     text,
-		stopChan: make(chan bool),
-		doneChan: make(chan bool),
+		frames: []string{"|", "/", "-", "\\"},
+		text:   text,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (s *RightSpinner) Start() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if s.active {
+		return // Already running
+	}
+	
 	s.active = true
+	s.wg.Add(1)
 	go s.animate()
 }
 
 func (s *RightSpinner) Stop() {
-	if s.active {
-		s.active = false
-		s.stopChan <- true
-		<-s.doneChan
-		s.clearTopRight()
+	s.mu.Lock()
+	if !s.active {
+		s.mu.Unlock()
+		return // Already stopped
 	}
+	
+	s.active = false
+	s.cancel()
+	s.mu.Unlock()
+	
+	// Wait for goroutine to finish
+	s.wg.Wait()
+	s.clearTopRight()
 }
 
 func (s *RightSpinner) animate() {
+	defer s.wg.Done()
+	
 	frameIndex := 0
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-s.stopChan:
-			s.doneChan <- true
+		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
+			s.mu.RLock()
+			if !s.active {
+				s.mu.RUnlock()
+				return
+			}
 			s.drawTopRight(s.text, s.frames[frameIndex%len(s.frames)])
+			s.mu.RUnlock()
 			frameIndex++
 		}
 	}

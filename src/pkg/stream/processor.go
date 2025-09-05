@@ -46,8 +46,20 @@ func NewProcessor() *Processor {
 
 // ProcessStream processes SSE stream with optimized buffering and pooling
 func (p *Processor) ProcessStream(reader io.Reader, callback types.StreamCallback) (string, error) {
-	var response strings.Builder
-	response.Grow(4096) // Pre-allocate for better performance
+	// Use sync.Pool for string builder to reduce allocations
+	builderPool := &sync.Pool{
+		New: func() interface{} {
+			builder := &strings.Builder{}
+			builder.Grow(4096)
+			return builder
+		},
+	}
+	
+	response := builderPool.Get().(*strings.Builder)
+	defer func() {
+		response.Reset()
+		builderPool.Put(response)
+	}()
 	
 	scanner := bufio.NewScanner(reader)
 	
@@ -57,19 +69,24 @@ func (p *Processor) ProcessStream(reader io.Reader, callback types.StreamCallbac
 	
 	scanner.Buffer(buf, MaxBufferSize)
 
+	// Reuse chunk struct to avoid allocations
+	var chunk StreamChunk
+	
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
 		
-		if !strings.HasPrefix(line, "data: ") {
+		// Avoid string allocation for prefix check
+		if len(line) < 6 || line[:6] != "data: " {
 			continue
 		}
 
-		data := strings.TrimPrefix(line, "data: ")
+		data := line[6:] // Avoid TrimPrefix allocation
 		if data == "[DONE]" {
 			return p.cleanResponse(response.String()), nil
 		}
 
-		var chunk StreamChunk
+		// Reset chunk for reuse
+		chunk = StreamChunk{}
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue // Skip invalid JSON
 		}
@@ -93,27 +110,65 @@ func (p *Processor) ProcessStream(reader io.Reader, callback types.StreamCallbac
 	return p.cleanResponse(response.String()), nil
 }
 
-// cleanResponse normalizes and cleans the response text
+// cleanResponse normalizes and cleans the response text with memory optimization
 func (p *Processor) cleanResponse(text string) string {
 	if text == "" {
 		return ""
 	}
 
-	// Normalize line endings
-	cleaned := strings.ReplaceAll(text, "\r\n", "\n")
-	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
-	cleaned = strings.TrimSpace(cleaned)
-
-	// Balance triple backticks
-	fenceCount := strings.Count(cleaned, "```")
+	// Use builder for efficient string operations
+	var builder strings.Builder
+	builder.Grow(len(text))
+	
+	// Normalize line endings in single pass
+	runes := []rune(text)
+	fenceCount := 0
+	
+	for i, r := range runes {
+		switch r {
+		case '\r':
+			if i+1 < len(runes) && runes[i+1] == '\n' {
+				continue // Skip \r in \r\n
+			}
+			builder.WriteRune('\n')
+		case '`':
+			if i+2 < len(runes) && runes[i+1] == '`' && runes[i+2] == '`' {
+				fenceCount++
+			}
+			builder.WriteRune(r)
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	
+	cleaned := strings.TrimSpace(builder.String())
+	
+	// Balance triple backticks if needed
 	if fenceCount%2 == 1 {
 		cleaned += "\n```"
 	}
+	
+	// Limit consecutive newlines efficiently
+	return p.limitNewlines(cleaned)
+}
 
-	// Limit consecutive newlines
-	for strings.Contains(cleaned, "\n\n\n\n") {
-		cleaned = strings.ReplaceAll(cleaned, "\n\n\n\n", "\n\n\n")
+// limitNewlines reduces consecutive newlines efficiently
+func (p *Processor) limitNewlines(text string) string {
+	var result strings.Builder
+	result.Grow(len(text))
+	
+	newlineCount := 0
+	for _, r := range text {
+		if r == '\n' {
+			newlineCount++
+			if newlineCount <= 3 {
+				result.WriteRune(r)
+			}
+		} else {
+			newlineCount = 0
+			result.WriteRune(r)
+		}
 	}
-
-	return cleaned
+	
+	return result.String()
 }
