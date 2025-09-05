@@ -11,7 +11,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
 	zeroconfig "zero-workflow/src/internal/config"
@@ -87,36 +86,53 @@ func runCommit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get diff: %w", err)
 	}
 
-	// Generate commit message using AI
-	color.Cyan("Analyzing changes with AI...")
-	commitOptions, err := generateCommitMessages(diff, stagedFiles)
-	if err != nil {
-		return fmt.Errorf("failed to generate commit messages: %w", err)
-	}
+	var selectedCommit CommitOption
+	for {
+		// Generate commit message using AI
+		color.Cyan("Analyzing changes with AI...")
+		commitOptions, err := generateCommitMessages(diff, stagedFiles)
+		if err != nil {
+			return fmt.Errorf("failed to generate commit messages: %w", err)
+		}
+		if len(commitOptions) == 0 {
+			color.Yellow("AI failed to generate a commit message.")
+			fmt.Print("Retry? (y/N): ")
+			reader := bufio.NewReader(os.Stdin)
+			retry, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(retry)) == "y" {
+				continue
+			}
+			return fmt.Errorf("no commit message generated")
+		}
+		selectedCommit = commitOptions[0]
 
-	if len(commitOptions) == 0 {
-		return fmt.Errorf("no commit message generated")
-	}
+		// Display generated commit
+		fmt.Println()
+		color.Cyan("Generated commit message:")
+		fmt.Printf("%s %s\n", color.GreenString("→"), color.WhiteString(selectedCommit.Title))
+		if selectedCommit.Description != "" {
+			fmt.Printf("  %s\n", color.HiBlackString(selectedCommit.Description))
+		}
 
-	selectedCommit := commitOptions[0]
-	
-	// Display generated commit
-	fmt.Println()
-	color.Cyan("Generated commit message:")
-	fmt.Printf("%s %s\n", color.GreenString("→"), color.WhiteString(selectedCommit.Title))
-	if selectedCommit.Description != "" {
-		fmt.Printf("  %s\n", color.HiBlackString(selectedCommit.Description))
-	}
-	
-	fmt.Print("\nProceed with commit? (y/N): ")
-	reader := bufio.NewReader(os.Stdin)
-	confirm, _ := reader.ReadString('\n')
-	confirm = strings.TrimSpace(strings.ToLower(confirm))
-	
-	if confirm != "y" && confirm != "yes" {
+		// Ask for user confirmation
+		fmt.Print("\nProceed with commit? (y/N/r to regenerate): ")
+		reader := bufio.NewReader(os.Stdin)
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+
+		if confirm == "y" || confirm == "yes" {
+			break // Proceed to commit
+		}
+		if confirm == "r" {
+			color.Cyan("Regenerating commit message...")
+			continue // Loop to regenerate
+		}
+
+		// Any other input cancels
 		color.Yellow("Commit cancelled.")
 		return nil
 	}
+
 
 	// Create commit
 	commitMessage := selectedCommit.Title
@@ -124,10 +140,19 @@ func runCommit(cmd *cobra.Command, args []string) error {
 		commitMessage += "\n\n" + selectedCommit.Description
 	}
 
+	userName, err := getGitConfig("user.name")
+	if err != nil {
+		return err
+	}
+	userEmail, err := getGitConfig("user.email")
+	if err != nil {
+		return err
+	}
+
 	commit, err := worktree.Commit(commitMessage, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  getGitConfig("user.name"),
-			Email: getGitConfig("user.email"),
+			Name:  userName,
+			Email: userEmail,
 			When:  time.Now(),
 		},
 	})
@@ -268,174 +293,25 @@ func parseCommitOptions(response string) []CommitOption {
 }
 
 func getStagedDiff(repo *git.Repository) (string, error) {
-	// Get HEAD commit
-	head, err := repo.Head()
+	// Use the system's `git diff` command for a reliable and standard diff.
+	cmd := exec.Command("git", "diff", "--staged")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	headCommit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		return "", fmt.Errorf("failed to get HEAD commit: %w", err)
-	}
-
-	// Get HEAD tree
-	headTree, err := headCommit.Tree()
-	if err != nil {
-		return "", fmt.Errorf("failed to get HEAD tree: %w", err)
-	}
-
-	// Get worktree and index
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return "", fmt.Errorf("failed to get worktree: %w", err)
-	}
-
-	// Get status to find staged files
-	status, err := worktree.Status()
-	if err != nil {
-		return "", fmt.Errorf("failed to get status: %w", err)
-	}
-
-	var diffOutput strings.Builder
-	
-	// Process each staged file
-	for file, fileStatus := range status {
-		if fileStatus.Staging == git.Unmodified {
-			continue
+		if len(output) == 0 {
+			return "", fmt.Errorf("failed to get staged diff: %w", err)
 		}
-		
-		diffOutput.WriteString(fmt.Sprintf("=== %s ===\n", file))
-		diffOutput.WriteString(fmt.Sprintf("Status: %s\n", getStagingStatus(fileStatus.Staging)))
-		
-		// Get staged content from index
-		if fileStatus.Staging == git.Modified || fileStatus.Staging == git.Added {
-			// Get file from HEAD (if exists)
-			var headContent string
-			if fileStatus.Staging == git.Modified {
-				headFile, err := headTree.File(file)
-				if err == nil {
-					headContent, _ = headFile.Contents()
-				}
-			}
-			
-			// Get staged content from index
-			idx, err := repo.Storer.Index()
-			if err == nil {
-				for _, entry := range idx.Entries {
-					if entry.Name == file {
-						// Get blob content from index
-						obj, err := repo.Storer.EncodedObject(plumbing.BlobObject, entry.Hash)
-						if err == nil {
-							reader, err := obj.Reader()
-							if err == nil {
-								defer reader.Close()
-								
-								var stagedContent strings.Builder
-								buffer := make([]byte, 1024)
-								for {
-									n, err := reader.Read(buffer)
-									if n > 0 {
-										stagedContent.Write(buffer[:n])
-									}
-									if err != nil {
-										break
-									}
-								}
-								
-								stagedStr := stagedContent.String()
-								
-								// Show diff
-								if fileStatus.Staging == git.Modified {
-									diffOutput.WriteString("Changes:\n")
-									diffOutput.WriteString(fmt.Sprintf("- Old: %d chars\n", len(headContent)))
-									diffOutput.WriteString(fmt.Sprintf("+ New: %d chars\n", len(stagedStr)))
-									
-									// Show actual line changes
-									oldLines := strings.Split(headContent, "\n")
-									newLines := strings.Split(stagedStr, "\n")
-									
-									diffOutput.WriteString("Diff:\n")
-									
-									// Simple diff algorithm
-									maxLines := 20
-									changeCount := 0
-									
-									for i := 0; i < len(newLines) && changeCount < maxLines; i++ {
-										if i < len(oldLines) {
-											if oldLines[i] != newLines[i] {
-												diffOutput.WriteString(fmt.Sprintf("-%d: %s\n", i+1, oldLines[i]))
-												diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, newLines[i]))
-												changeCount++
-											}
-										} else {
-											// New line added
-											diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, newLines[i]))
-											changeCount++
-										}
-									}
-									
-									if changeCount >= maxLines {
-										diffOutput.WriteString("... (more changes)\n")
-									}
-								} else {
-									// New file
-									diffOutput.WriteString("New file content:\n")
-									lines := strings.Split(stagedStr, "\n")
-									maxLines := 15
-									if len(lines) > maxLines {
-										lines = lines[:maxLines]
-										diffOutput.WriteString("(showing first 15 lines)\n")
-									}
-									for i, line := range lines {
-										diffOutput.WriteString(fmt.Sprintf("+%d: %s\n", i+1, line))
-									}
-								}
-							}
-						}
-						break
-					}
-				}
-			}
-		} else if fileStatus.Staging == git.Deleted {
-			diffOutput.WriteString("File deleted\n")
-		}
-		
-		diffOutput.WriteString("\n")
 	}
-	
-	result := diffOutput.String()
-	if strings.TrimSpace(result) == "" {
-		return "No staged changes found", nil
-	}
-	
-	// Limit diff size to avoid overwhelming AI
+
+	result := string(output)
+
+	// Limit diff size to avoid overwhelming the AI model and hitting token limits.
 	if len(result) > 8000 {
-		lines := strings.Split(result, "\n")
-		if len(lines) > 200 {
-			result = strings.Join(lines[:200], "\n") + "\n... (diff truncated)"
-		}
+		result = result[:8000] + "\n... (diff truncated)"
 	}
-	
+
 	return result, nil
 }
 
-func getStagingStatus(status git.StatusCode) string {
-	switch status {
-	case git.Added:
-		return "Added"
-	case git.Modified:
-		return "Modified"
-	case git.Deleted:
-		return "Deleted"
-	case git.Renamed:
-		return "Renamed"
-	case git.Copied:
-		return "Copied"
-	default:
-		return "Unknown"
-	}
-}
 
 
 func pushToRemote(repo *git.Repository) error {
@@ -462,26 +338,17 @@ func pushToRemote(repo *git.Repository) error {
 	return nil
 }
 
-func getGitConfig(key string) string {
-	// Read actual git config
-	cmd := exec.Command("git", "config", "--global", key)
+func getGitConfig(key string) (string, error) {
+	cmd := exec.Command("git", "config", key)
 	output, err := cmd.Output()
 	if err != nil {
-		// Fallback to local config if global fails
-		cmd = exec.Command("git", "config", key)
-		output, err = cmd.Output()
-		if err != nil {
-			// Final fallbacks
-			switch key {
-			case "user.name":
-				return "Developer"
-			case "user.email":
-				return "developer@example.com"
-			default:
-				return ""
-			}
-		}
+		return "", fmt.Errorf("Error: `git config %s` is not set. Please configure it using `git config --global %s \"Your Name/Email\"`", key, key)
 	}
 	
-	return strings.TrimSpace(string(output))
+	value := strings.TrimSpace(string(output))
+	if value == "" {
+		return "", fmt.Errorf("Error: `git config %s` is empty. Please configure it.", key)
+	}
+	
+	return value, nil
 }
