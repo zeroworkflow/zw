@@ -2,14 +2,16 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"zero-workflow/src/internal/ai"
+	"zero-workflow/src/internal/config"
 	"zero-workflow/src/internal/renderer"
 	"zero-workflow/src/internal/ui"
+	"zero-workflow/src/pkg/ai/zai"
 )
 
 var (
@@ -35,7 +37,18 @@ func init() {
 }
 
 func runAsk(cmd *cobra.Command, args []string) {
-	client := ai.NewClient()
+	token, err := config.GetToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	client, err := zai.NewClient(token)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating AI client: %v\n", err)
+		os.Exit(1)
+	}
+
 	renderer := renderer.NewMarkdownRenderer()
 
 	if interactive {
@@ -53,7 +66,7 @@ func runAsk(cmd *cobra.Command, args []string) {
 	askQuestion(client, renderer, question)
 }
 
-func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, question string) {
+func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string) {
     // Fixed top-right spinner during real streaming
     spinner := ui.NewRightSpinner("Thinking")
     spinner.Start()
@@ -61,7 +74,8 @@ func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, questio
     var rawBuilder strings.Builder
 
     // Stream deltas and print them as raw text during streaming
-    response, err := client.ChatStream(question, func(delta string) {
+    ctx := context.Background()
+    response, err := client.ChatStream(ctx, question, func(delta string) {
         rawBuilder.WriteString(delta)
         fmt.Print(delta)
     })
@@ -94,7 +108,7 @@ func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, questio
     fmt.Println("")
 }
 
-func runInteractiveMode(client *ai.Client, renderer *renderer.MarkdownRenderer) {
+func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer) {
 	fmt.Println("ZeroWorkflow AI - Interactive Mode")
 	fmt.Println("Type your questions and press Enter. Type 'exit' or 'quit' to leave.")
 	fmt.Println(strings.Repeat("─", 60))
