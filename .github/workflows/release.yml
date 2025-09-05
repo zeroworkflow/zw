@@ -64,10 +64,10 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: 🔍 Verify dependencies
-      run: go mod verify
+      run: cd src && go mod verify
 
     - name: 🧪 Run tests
-      run: go test -v ./...
+      run: cd src && go test -v ./...
 
     - name: 🏗️ Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
       env:
@@ -75,15 +75,11 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
       run: |
-        go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ${{ matrix.name }} src/main.go
+        cd src && go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../${{ matrix.name }} .
 
     - name: 📋 Generate checksums
       run: |
-        if [[ "${{ matrix.goos }}" == "windows" ]]; then
-          sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
-        else
-          shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
-        fi
+        sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
 
     - name: 📤 Upload artifacts
       uses: actions/upload-artifact@v3
