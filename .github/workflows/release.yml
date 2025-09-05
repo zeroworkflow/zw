@@ -112,12 +112,12 @@ jobs:
         echo "### Quick Install" >> CHANGELOG.md
         echo '```bash' >> CHANGELOG.md
         echo "# Download and install" >> CHANGELOG.md
-        echo 'curl -L https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/install.sh | bash' >> CHANGELOG.md
+        echo 'curl -L https://github.com/zeroworkflow/zw/releases/download/${{ github.ref_name }}/install.sh | bash' >> CHANGELOG.md
         echo '```' >> CHANGELOG.md
         echo "" >> CHANGELOG.md
         echo "### Manual Download" >> CHANGELOG.md
         echo "Choose your platform:" >> CHANGELOG.md
-        echo "- 🐧 **Linux AMD64**: [zw-linux-amd64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-linux-amd64)" >> CHANGELOG.md
+        echo "- 🐧 **Linux AMD64**: [zw-linux-amd64](https://github.com/zeroworkflow/zw/releases/download/${{ github.ref_name }}/zw-linux-amd64)" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
         echo "## 🚀 Quick Start" >> CHANGELOG.md
         echo '```bash' >> CHANGELOG.md
@@ -155,6 +155,7 @@ jobs:
         files: |
           zw-linux-amd64
           zw-linux-amd64.sha256
+          install.sh
         generate_release_notes: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -163,4 +164,4 @@ jobs:
       run: |
         echo "🎉 Release ${{ github.ref_name }} created successfully!"
         echo "📦 Binaries available for all platforms"
-        echo "🔗 Release URL: https://github.com/derxanax/ZeroWorkflow/releases/tag/${{ github.ref_name }}"
+        echo "🔗 Release URL: https://github.com/zeroworkflow/zw/releases/tag/${{ github.ref_name }}"
