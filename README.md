@@ -25,42 +25,88 @@ ZeroWorkflow is a collection of AI-powered command-line utilities designed to au
 
 ### Installation
 
+#### Quick Install (Recommended)
 ```bash
 # Clone the repository
 git clone https://github.com/derxanax/ZeroWorkflow.git
 cd ZeroWorkflow
 
-# Build the binary
+# Run the installation script
+./install.sh
+```
+
+#### Manual Installation
+```bash
+# Clone the repository
+git clone https://github.com/derxanax/ZeroWorkflow.git
+cd ZeroWorkflow
+
+# Build and install using Makefile
+make install
+
+# Or build locally
+make build
+```
+
+#### Alternative Methods
+```bash
+# Build manually
 go build -o zw src/main.go
 
-# Or install globally
+# Install to GOPATH/bin
 go install
 ```
 
 ### Setup
 
-1. Set your AI token in environment variables:
-```bash
-export AI_TOKEN="your_ai_token_here"
-```
+1. **Automatic setup** (if using install script):
+   - The installer creates a `.env` template file
+   - Edit `.env` and add your AI token
 
-2. Or create a `.env` file:
-```bash
-echo "AI_TOKEN=your_ai_token_here" > .env
-```
+2. **Manual setup**:
+   ```bash
+   # Create .env file
+   echo "AI_TOKEN=your_ai_token_here" > .env
+   
+   # Or set environment variable
+   export AI_TOKEN="your_ai_token_here"
+   ```
+
+3. **Get your AI token**:
+   - Visit [Z.ai](https://chat.z.ai) to get your API token
+   - Add it to `.env` file or set as environment variable
 
 ### Usage
 
 ```bash
-# Ask AI a question
-./zw ask "How to create a REST API in Go?"
+# Ask AI a question (if installed globally)
+zw ask "How to create a REST API in Go?"
+
+# Include files for context
+zw ask "Review my code" --file main.go
+zw ask "Explain this" -f src/server.go -f config/app.yaml
 
 # Interactive mode for continuous conversation
-./zw ask -i
+zw ask -i
 
 # Get help
-./zw --help
-./zw ask --help
+zw --help
+zw ask --help
+
+# Local usage (if not installed globally)
+./zw ask "your question" --file example.go
+```
+
+#### Using Makefile
+```bash
+# Build and run
+make run-ask ARGS="How to create a Go struct?"
+
+# Interactive mode
+make run-interactive
+
+# See all available commands
+make help
 ```
 
 ## 🛠 Commands
@@ -72,10 +118,14 @@ Interactive AI assistant with markdown rendering and syntax highlighting.
 **Examples:**
 ```bash
 # Single question
-./zw ask "Explain Go interfaces"
+zw ask "Explain Go interfaces"
+
+# Ask about specific files
+zw ask "Review this code" --file src/main.go
+zw ask "Explain this function" -f utils.go -f config.go
 
 # Interactive mode
-./zw ask -i
+zw ask -i
 > What are Go channels?
 > How to handle errors in Go?
 > exit
@@ -85,7 +135,9 @@ Interactive AI assistant with markdown rendering and syntax highlighting.
 - ✨ Syntax highlighting for code blocks
 - 📝 Rich markdown rendering
 - 🔄 Interactive conversation mode
+- 📁 **File context support** - Include files for AI analysis
 - 🎨 Beautiful terminal formatting
+- 🛡️ Safe file handling with size limits
 
 ## 📁 Project Structure
 
@@ -137,11 +189,28 @@ ZeroWorkflow/
 - Terminal with 256-color support
 
 ### Building from Source
+
+#### Using Makefile (Recommended)
 ```bash
 # Clone repository
 git clone https://github.com/derxanax/ZeroWorkflow.git
 cd ZeroWorkflow
 
+# Build
+make build
+
+# Install globally
+make install
+
+# Run tests
+make test
+
+# Development build with race detection
+make dev
+```
+
+#### Manual Build
+```bash
 # Install dependencies
 go mod tidy
 

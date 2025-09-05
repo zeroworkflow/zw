@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/config"
+	"zero-workflow/src/internal/files"
 	"zero-workflow/src/internal/renderer"
 	"zero-workflow/src/internal/ui"
 	"zero-workflow/src/pkg/ai/zai"
@@ -16,16 +17,19 @@ import (
 
 var (
 	interactive bool
+	fileList   []string
 )
 
 var askCmd = &cobra.Command{
 	Use:   "ask [question]",
 	Short: "Ask AI a question",
 	Long: `Ask the AI assistant a question. You can either provide the question as an argument
-or use the interactive mode with the -i flag.
+or use the interactive mode with the -i flag. You can also include files for context.
 
 Examples:
   zw ask "How to create a Go struct?"
+  zw ask "Explain this code" --file src/main.go
+  zw ask "Review my code" -f main.go -f config.go
   zw ask -i  # Interactive mode`,
 	Args: cobra.ArbitraryArgs,
 	Run:  runAsk,
@@ -34,6 +38,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(askCmd)
 	askCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactive mode for continuous conversation")
+	askCmd.Flags().StringSliceVarP(&fileList, "file", "f", []string{}, "Include files for context (can be used multiple times)")
 }
 
 func runAsk(cmd *cobra.Command, args []string) {
@@ -63,19 +68,46 @@ func runAsk(cmd *cobra.Command, args []string) {
 	}
 
 	question := strings.Join(args, " ")
-	askQuestion(client, renderer, question)
+	askQuestion(client, renderer, question, fileList)
 }
 
-func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string) {
+func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string, filePaths []string) {
     // Fixed top-right spinner during real streaming
     spinner := ui.NewRightSpinner("Thinking")
     spinner.Start()
 
     var rawBuilder strings.Builder
 
+    // Process files if provided
+    var fileContext string
+    if len(filePaths) > 0 {
+        fileReader := files.NewReader()
+        
+        // Validate files first
+        if err := fileReader.ValidateFiles(filePaths); err != nil {
+            spinner.Stop()
+            fmt.Fprintf(os.Stderr, "\nFile validation error: %v\n", err)
+            os.Exit(1)
+        }
+        
+        // Read files
+        fileContents, err := fileReader.ReadFiles(filePaths)
+        if err != nil {
+            spinner.Stop()
+            fmt.Fprintf(os.Stderr, "\nError reading files: %v\n", err)
+            os.Exit(1)
+        }
+        
+        fileContext = fileReader.FormatFilesForAI(fileContents)
+        fmt.Printf("\n[*] Loaded %d file(s) for context\n", len(fileContents))
+    }
+    
+    // Combine question with file context
+    fullQuestion := question + fileContext
+    
     // Stream deltas and print them as raw text during streaming
     ctx := context.Background()
-    response, err := client.ChatStream(ctx, question, func(delta string) {
+    response, err := client.ChatStream(ctx, fullQuestion, func(delta string) {
         rawBuilder.WriteString(delta)
         fmt.Print(delta)
     })
@@ -133,7 +165,8 @@ func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer)
 			break
 		}
 		
-		askQuestion(client, renderer, input)
+		// In interactive mode, files are not supported yet
+		askQuestion(client, renderer, input, []string{})
 	}
 	
 	if err := scanner.Err(); err != nil {

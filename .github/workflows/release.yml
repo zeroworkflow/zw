@@ -1,0 +1,194 @@
+name: 🚀 Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  build:
+    name: 🏗️ Build Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: zw-linux-amd64
+            emoji: 🐧
+          - goos: linux
+            goarch: arm64
+            name: zw-linux-arm64
+            emoji: 🐧
+          - goos: darwin
+            goarch: amd64
+            name: zw-darwin-amd64
+            emoji: 🍎
+          - goos: darwin
+            goarch: arm64
+            name: zw-darwin-arm64
+            emoji: 🍎
+          - goos: windows
+            goarch: amd64
+            name: zw-windows-amd64.exe
+            emoji: 🪟
+          - goos: windows
+            goarch: arm64
+            name: zw-windows-arm64.exe
+            emoji: 🪟
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: 📦 Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: 🔍 Verify dependencies
+      run: go mod verify
+
+    - name: 🧪 Run tests
+      run: go test -v ./...
+
+    - name: 🏗️ Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ${{ matrix.name }} src/main.go
+
+    - name: 📋 Generate checksums
+      run: |
+        if [[ "${{ matrix.goos }}" == "windows" ]]; then
+          sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
+        else
+          shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
+        fi
+
+    - name: 📤 Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.name }}
+        path: |
+          ${{ matrix.name }}
+          ${{ matrix.name }}.sha256
+
+  release:
+    name: 🎉 Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 📥 Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: 📋 Generate changelog
+      id: changelog
+      run: |
+        echo "## 🎯 What's New" > CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        
+        # Get commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          echo "### 📝 Changes since $LAST_TAG" >> CHANGELOG.md
+          git log --pretty=format:"- %s" $LAST_TAG..HEAD >> CHANGELOG.md
+        else
+          echo "### 🚀 Initial Release" >> CHANGELOG.md
+          echo "- AI-powered developer tools suite" >> CHANGELOG.md
+          echo "- Interactive AI chat assistant with syntax highlighting" >> CHANGELOG.md
+          echo "- File context support with --file/-f flag" >> CHANGELOG.md
+          echo "- Beautiful terminal UI with markdown rendering" >> CHANGELOG.md
+          echo "- Cross-platform support (Linux, macOS, Windows)" >> CHANGELOG.md
+          echo "- Easy installation with automated script" >> CHANGELOG.md
+        fi
+        
+        echo "" >> CHANGELOG.md
+        echo "## 📦 Installation" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "### Quick Install" >> CHANGELOG.md
+        echo '```bash' >> CHANGELOG.md
+        echo "# Download and install" >> CHANGELOG.md
+        echo 'curl -L https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/install.sh | bash' >> CHANGELOG.md
+        echo '```' >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "### Manual Download" >> CHANGELOG.md
+        echo "Choose your platform:" >> CHANGELOG.md
+        echo "- 🐧 **Linux AMD64**: [zw-linux-amd64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-linux-amd64)" >> CHANGELOG.md
+        echo "- 🐧 **Linux ARM64**: [zw-linux-arm64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-linux-arm64)" >> CHANGELOG.md
+        echo "- 🍎 **macOS AMD64**: [zw-darwin-amd64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-darwin-amd64)" >> CHANGELOG.md
+        echo "- 🍎 **macOS ARM64**: [zw-darwin-arm64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-darwin-arm64)" >> CHANGELOG.md
+        echo "- 🪟 **Windows AMD64**: [zw-windows-amd64.exe](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-windows-amd64.exe)" >> CHANGELOG.md
+        echo "- 🪟 **Windows ARM64**: [zw-windows-arm64.exe](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-windows-arm64.exe)" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "## 🚀 Quick Start" >> CHANGELOG.md
+        echo '```bash' >> CHANGELOG.md
+        echo "# Set your AI token" >> CHANGELOG.md
+        echo 'export AI_TOKEN="your_token_here"' >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "# Ask AI a question" >> CHANGELOG.md
+        echo 'zw ask "How to create a Go struct?"' >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "# Include files for context" >> CHANGELOG.md
+        echo 'zw ask "Review this code" --file main.go' >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "# Interactive mode" >> CHANGELOG.md
+        echo 'zw ask -i' >> CHANGELOG.md
+        echo '```' >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "## 🔐 Checksums" >> CHANGELOG.md
+        echo "Verify your downloads:" >> CHANGELOG.md
+        echo '```' >> CHANGELOG.md
+        for file in */zw-*.sha256; do
+          if [ -f "$file" ]; then
+            cat "$file" >> CHANGELOG.md
+          fi
+        done
+        echo '```' >> CHANGELOG.md
+
+    - name: 🎉 Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: "ZeroWorkflow ${{ github.ref_name }} 🚀"
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: false
+        files: |
+          */zw-*
+        generate_release_notes: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 🎊 Success notification
+      run: |
+        echo "🎉 Release ${{ github.ref_name }} created successfully!"
+        echo "📦 Binaries available for all platforms"
+        echo "🔗 Release URL: https://github.com/derxanax/ZeroWorkflow/releases/tag/${{ github.ref_name }}"
