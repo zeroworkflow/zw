@@ -31,7 +31,17 @@ func (f *factory) CreateClient(provider string, token string) (Client, error) {
 		return nil, fmt.Errorf("provider '%s' not registered", provider)
 	}
 
-	return p.CreateClient(token)
+	client, err := p.CreateClient(token)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Type assertion to Client interface
+	if c, ok := client.(Client); ok {
+		return c, nil
+	}
+	
+	return nil, fmt.Errorf("provider returned invalid client type")
 }
 
 // RegisterProvider registers a new provider

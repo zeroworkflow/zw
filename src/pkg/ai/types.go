@@ -31,7 +31,7 @@ type Client interface {
 // Provider defines the interface for AI providers
 type Provider interface {
 	// CreateClient creates a new AI client with the given token
-	CreateClient(token string) (Client, error)
+	CreateClient(token string) (interface{}, error)
 	
 	// ValidateToken validates the token format
 	ValidateToken(token string) error
