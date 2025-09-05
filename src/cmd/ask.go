@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/config"
@@ -69,9 +70,54 @@ func runAsk(cmd *cobra.Command, args []string) {
 	askQuestion(client, renderer, question, fileList, errorHandler)
 }
 
+// streamingPrinter handles progressive Markdown rendering during streaming
+type streamingPrinter struct {
+	renderer     *renderer.MarkdownRenderer
+	buffer       strings.Builder
+	lastLines    int
+	lastUpdate   time.Time
+	throttle     time.Duration
+}
+
+func newStreamingPrinter(r *renderer.MarkdownRenderer) *streamingPrinter {
+	return &streamingPrinter{
+		renderer: r,
+		throttle: 80 * time.Millisecond,
+	}
+}
+
+func (p *streamingPrinter) onDelta(delta string) {
+	p.buffer.WriteString(delta)
+	now := time.Now()
+	
+	// Force render on newlines or after throttle period
+	shouldRender := strings.Contains(delta, "\n") || now.Sub(p.lastUpdate) >= p.throttle
+	if shouldRender {
+		p.render()
+		p.lastUpdate = now
+	}
+}
+
+func (p *streamingPrinter) render() {
+	content := p.renderer.RenderMarkdown(p.buffer.String())
+	lines := strings.Count(content, "\n")
+	
+	// Clear previous output by moving cursor up and clearing
+	if p.lastLines > 0 {
+		fmt.Printf("\x1b[%dA\r\x1b[J", p.lastLines)
+	}
+	
+	fmt.Print(content)
+	p.lastLines = lines
+}
+
+func (p *streamingPrinter) flush() {
+	p.render()
+	fmt.Println()
+}
+
 func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string, filePaths []string, errorHandler *handlers.ErrorHandler) {
     spinnerHandler := handlers.NewSpinnerHandler("Thinking")
-    var rawBuilder strings.Builder
 
     err := spinnerHandler.WithSpinner(func() error {
         // Process files if provided
@@ -83,21 +129,18 @@ func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, questi
         // Combine question with file context
         fullQuestion := question + fileContext
         
-        // Stream deltas and print them as raw text during streaming
+        // Create streaming printer for progressive rendering
+        printer := newStreamingPrinter(renderer)
+        
+        // Stream with progressive Markdown rendering
         ctx := context.Background()
-        response, err := client.ChatStream(ctx, fullQuestion, func(delta string) {
-            rawBuilder.WriteString(delta)
-            fmt.Print(delta)
-        })
-
+        _, err = client.ChatStream(ctx, fullQuestion, printer.onDelta)
         if err != nil {
             return err
         }
-
-        // After streaming is complete, replace raw output with rendered markdown
-        if response != "" {
-            renderFinalOutput(&rawBuilder, renderer, response)
-        }
+        
+        // Final flush to ensure everything is rendered
+        printer.flush()
         
         return nil
     })
@@ -105,8 +148,6 @@ func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, questi
     if err != nil {
         errorHandler.HandleFatalError(err, "question processing")
     }
-    
-    fmt.Println("")
 }
 
 // processFiles handles file processing logic
@@ -130,21 +171,6 @@ func processFiles(filePaths []string, errorHandler *handlers.ErrorHandler) (stri
     return fileReader.FormatFilesForAI(fileContents), nil
 }
 
-// renderFinalOutput handles the final markdown rendering
-func renderFinalOutput(rawBuilder *strings.Builder, renderer *renderer.MarkdownRenderer, response string) {
-    rawOutput := rawBuilder.String()
-    lines := strings.Count(rawOutput, "\n")
-    
-    // Move cursor up and clear the raw output
-    if lines > 0 {
-        fmt.Printf("\x1b[%dA", lines)
-    }
-    fmt.Print("\r\x1b[J")
-    
-    // Print the beautifully rendered version
-    finalRendered := renderer.RenderMarkdown(response)
-    fmt.Print(finalRendered)
-}
 
 func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer, errorHandler *handlers.ErrorHandler) {
 	fmt.Println("ZeroWorkflow AI - Interactive Mode")

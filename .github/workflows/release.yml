@@ -27,15 +27,15 @@ jobs:
             emoji: 🐧
 
     steps:
-    - name: 📥 Checkout code
+    - name:  Checkout code
       uses: actions/checkout@v4
 
-    - name: 🔧 Set up Go
+    - name:  Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: ${{ env.GO_VERSION }}
 
-    - name: 📦 Cache Go modules
+    - name:  Cache Go modules
       uses: actions/cache@v3
       with:
         path: ~/go/pkg/mod
@@ -43,11 +43,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
-    - name: 🔍 Verify dependencies
+    - name:  Verify dependencies
       run: go mod verify
 
 
-    - name: 🏗️ Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
+    - name:  Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -59,7 +59,7 @@ jobs:
       run: |
         sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
 
-    - name: 📤 Upload artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.name }}
@@ -75,12 +75,12 @@ jobs:
       contents: write
 
     steps:
-    - name: 📥 Checkout code
+    - name:  Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: 📥 Download all artifacts
+    - name:  Download all artifacts
       uses: actions/download-artifact@v4
       with:
         merge-multiple: true
@@ -94,10 +94,10 @@ jobs:
         # Get commits since last tag
         LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         if [ -n "$LAST_TAG" ]; then
-          echo "### 📝 Changes since $LAST_TAG" >> CHANGELOG.md
+          echo "###  Changes since $LAST_TAG" >> CHANGELOG.md
           git log --pretty=format:"- %s" $LAST_TAG..HEAD >> CHANGELOG.md
         else
-          echo "### 🚀 Initial Release" >> CHANGELOG.md
+          echo "### 🦩 Initial Release" >> CHANGELOG.md
           echo "- AI-powered developer tools suite" >> CHANGELOG.md
           echo "- Interactive AI chat assistant with syntax highlighting" >> CHANGELOG.md
           echo "- File context support with --file/-f flag" >> CHANGELOG.md
@@ -119,7 +119,7 @@ jobs:
         echo "Choose your platform:" >> CHANGELOG.md
         echo "- 🐧 **Linux AMD64**: [zw-linux-amd64](https://github.com/zeroworkflow/zw/releases/download/${{ github.ref_name }}/zw-linux-amd64)" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "## 🚀 Quick Start" >> CHANGELOG.md
+        echo "## 💫 Quick Start" >> CHANGELOG.md
         echo '```bash' >> CHANGELOG.md
         echo "# Set your AI token" >> CHANGELOG.md
         echo "  - Free keys [zw-free keys](https://github.com/zeroworkflow/zw-keys)"
