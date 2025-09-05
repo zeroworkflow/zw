@@ -1,7 +1,7 @@
 package zai
 
 import (
-	"zero-workflow/src/internal/config"
+	"fmt"
 )
 
 // Provider implements the AI provider for Z.ai
@@ -19,7 +19,10 @@ func (p *Provider) CreateClient(token string) (interface{}, error) {
 
 // ValidateToken validates the token format for Z.ai
 func (p *Provider) ValidateToken(token string) error {
-	return config.ValidateToken(token)
+	if token == "" {
+		return fmt.Errorf("token cannot be empty")
+	}
+	return nil
 }
 
 // GetName returns the provider name

@@ -34,11 +34,26 @@ type UserContext struct {
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
+	apiURL := os.Getenv("ZW_API_URL")
+	if apiURL == "" {
+		apiURL = "https://chat.z.ai/api"
+	}
+	
+	userAgent := os.Getenv("ZW_USER_AGENT")
+	if userAgent == "" {
+		userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+	}
+	
+	model := os.Getenv("ZW_MODEL")
+	if model == "" {
+		model = "0727-360B-API"
+	}
+
 	return &Config{
-		APIBaseURL: "https://chat.z.ai/api",
-		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
+		APIBaseURL: apiURL,
+		UserAgent:  userAgent,
 		Timeout:    120 * time.Second,
-		Model:      "0727-360B-API",
+		Model:      model,
 	}
 }
 
@@ -61,15 +76,16 @@ func DefaultUserContext() *UserContext {
 	}
 }
 
-// ValidateToken validates AI token format
-func ValidateToken(token string) error {
+// GetToken retrieves AI token from environment
+func GetToken() (string, error) {
+	// Try to load .env file first
+	LoadEnv()
+
+	token := os.Getenv("AI_TOKEN")
 	if token == "" {
-		return fmt.Errorf("AI_TOKEN environment variable not set")
+		return "", fmt.Errorf("AI_TOKEN environment variable not set")
 	}
-	if len(token) < 10 {
-		return fmt.Errorf("invalid token format: too short")
-	}
-	return nil
+	return token, nil
 }
 
 // LoadEnv loads environment variables from .env file if it exists
@@ -107,14 +123,3 @@ func LoadEnv() error {
 	return nil
 }
 
-// GetToken retrieves and validates AI token from environment
-func GetToken() (string, error) {
-	// Try to load .env file first
-	LoadEnv()
-
-	token := os.Getenv("AI_TOKEN")
-	if err := ValidateToken(token); err != nil {
-		return "", err
-	}
-	return token, nil
-}

@@ -221,15 +221,15 @@ main() {
     echo
     print_success "Installation completed successfully!"
     echo
-    print_status "🚀 Quick start:"
+    print_status "☃️ Quick start:"
     echo "  1. Get your AI token from https://chat.z.ai"
     echo "  2. Set it: export AI_TOKEN=\"your_token_here\""
     echo "  3. Ask AI: zw ask \"How to create a Go struct?\""
     echo "  4. Include files: zw ask \"Review this code\" --file main.go"
     echo "  5. Interactive mode: zw ask -i"
     echo
-    print_status "📚 Documentation: https://github.com/zeroworkflow/zw"
-    print_status "🐛 Issues: https://github.com/zeroworkflow/zw/issues"
+    print_status "[X] Documentation: https://github.com/zeroworkflow/zw"
+    print_status "🪵 Issues: https://github.com/zeroworkflow/zw/issues"
 }
 
 # Handle command line arguments

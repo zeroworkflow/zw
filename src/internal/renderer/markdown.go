@@ -2,7 +2,6 @@ package renderer
 
 import (
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -15,7 +14,8 @@ import (
 )
 
 type MarkdownRenderer struct {
-	style *chroma.Style
+	style      *chroma.Style
+	regexCache *RegexCache
 }
 
 // processOpenCodeBlock detects a trailing, not-yet-closed code block and renders it as a box
@@ -54,7 +54,8 @@ func (r *MarkdownRenderer) HighlightCode(code, lang string) string {
 
 func NewMarkdownRenderer() *MarkdownRenderer {
 	return &MarkdownRenderer{
-		style: styles.Get("github"),
+		style:      styles.Get("github"),
+		regexCache: NewRegexCache(),
 	}
 }
 
@@ -73,9 +74,8 @@ func (r *MarkdownRenderer) RenderMarkdown(content string) string {
 
 // processCodeBlocks finds and syntax highlights code blocks
 func (r *MarkdownRenderer) processCodeBlocks(content string) string {
-	// Regex to match code blocks with language specification
-	// Allow optional newline before closing backticks
-	codeBlockRegex := regexp.MustCompile("```([a-zA-Z0-9_+-]*)\\n([\\s\\S]*?)\\n?```")
+	// Use cached regex for better performance
+	codeBlockRegex := r.regexCache.Get("```([a-zA-Z0-9_+-]*)\\n([\\s\\S]*?)\\n?```")
 	
 	return codeBlockRegex.ReplaceAllStringFunc(content, func(match string) string {
 		parts := codeBlockRegex.FindStringSubmatch(match)
@@ -211,11 +211,11 @@ func (r *MarkdownRenderer) configureTextWidth() {
 // cleanPythonAnsiCodes cleans up complex ANSI sequences specific to Python highlighting
 func (r *MarkdownRenderer) cleanPythonAnsiCodes(text string) string {
 	// Remove complex nested ANSI sequences that can cause width calculation issues
-	complexAnsiRegex := regexp.MustCompile(`\x1b\[\d+;\d+;\d+m`)
+	complexAnsiRegex := r.regexCache.Get(`\x1b\[\d+;\d+;\d+m`)
 	text = complexAnsiRegex.ReplaceAllString(text, "")
 	
 	// Normalize remaining ANSI codes to simpler forms
-	simpleAnsiRegex := regexp.MustCompile(`\x1b\[(\d+)m`)
+	simpleAnsiRegex := r.regexCache.Get(`\x1b\[(\d+)m`)
 	text = simpleAnsiRegex.ReplaceAllStringFunc(text, func(match string) string {
 		// Keep only basic color codes
 		if strings.Contains(match, "0m") || // reset
@@ -242,28 +242,28 @@ func (r *MarkdownRenderer) getTerminalWidth() int {
 // processMarkdownElements processes other markdown elements like bold, italic, etc.
 func (r *MarkdownRenderer) processMarkdownElements(content string) string {
 	// Bold text **text** or __text__
-	boldRegex := regexp.MustCompile(`\*\*([^*]+)\*\*|__([^_]+)__`)
+	boldRegex := r.regexCache.Get(`\*\*([^*]+)\*\*|__([^_]+)__`)
 	content = boldRegex.ReplaceAllStringFunc(content, func(match string) string {
 		text := strings.Trim(match, "*_")
 		return color.New(color.Bold).Sprint(text)
 	})
 	
 	// Italic text *text* or _text_
-	italicRegex := regexp.MustCompile(`\*([^*]+)\*|_([^_]+)_`)
+	italicRegex := r.regexCache.Get(`\*([^*]+)\*|_([^_]+)_`)
 	content = italicRegex.ReplaceAllStringFunc(content, func(match string) string {
 		text := strings.Trim(match, "*_")
 		return color.New(color.Italic).Sprint(text)
 	})
 	
 	// Inline code `code`
-	inlineCodeRegex := regexp.MustCompile("`([^`]+)`")
+	inlineCodeRegex := r.regexCache.Get("`([^`]+)`")
 	content = inlineCodeRegex.ReplaceAllStringFunc(content, func(match string) string {
 		code := strings.Trim(match, "`")
 		return color.New(color.BgHiBlack, color.FgWhite).Sprint(" " + code + " ")
 	})
 	
 	// Headers
-	headerRegex := regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	headerRegex := r.regexCache.Get(`^(#{1,6})\s+(.+)$`)
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		if matches := headerRegex.FindStringSubmatch(line); matches != nil {

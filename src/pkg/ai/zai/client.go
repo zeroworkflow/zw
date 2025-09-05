@@ -1,29 +1,21 @@
 package zai
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"zero-workflow/src/internal/config"
-	"zero-workflow/src/internal/errors"
+	"zero-workflow/src/pkg/errors"
+	httplib "zero-workflow/src/pkg/http"
+	"zero-workflow/src/pkg/stream"
+	"zero-workflow/src/pkg/types"
 )
-
-// Message represents a chat message
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// StreamCallback is called for each delta during streaming
-type StreamCallback func(delta string)
 
 const (
 	bufferSize = 4096
@@ -32,23 +24,14 @@ const (
 
 // Client implements the AI client for Z.ai
 type Client struct {
-	config     *config.Config
-	aiParams   *config.AIParams
-	userCtx    *config.UserContext
-	authToken  string
-	httpClient *http.Client
+	config        *config.Config
+	aiParams      *config.AIParams
+	userCtx       *config.UserContext
+	authToken     string
+	httpClient    *httplib.SecureHTTPClient
+	streamProcessor *stream.Processor
 }
 
-// StreamChunk represents a streaming response chunk
-type StreamChunk struct {
-	Type string `json:"type"`
-	Data struct {
-		DeltaContent string      `json:"delta_content,omitempty"`
-		Phase        string      `json:"phase"`
-		Done         bool        `json:"done,omitempty"`
-		Usage        interface{} `json:"usage,omitempty"`
-	} `json:"data"`
-}
 
 // ChatResponse represents the chat creation response
 type ChatResponse struct {
@@ -62,16 +45,18 @@ type ChatResponse struct {
 
 // NewClient creates a new Z.ai client
 func NewClient(token string) (*Client, error) {
-	if err := config.ValidateToken(token); err != nil {
-		return nil, err
+	if token == "" {
+		return nil, fmt.Errorf("token cannot be empty")
 	}
 
+	cfg := config.DefaultConfig()
 	return &Client{
-		config:     config.DefaultConfig(),
-		aiParams:   config.DefaultAIParams(),
-		userCtx:    config.DefaultUserContext(),
-		authToken:  token,
-		httpClient: &http.Client{Timeout: config.DefaultConfig().Timeout},
+		config:          cfg,
+		aiParams:        config.DefaultAIParams(),
+		userCtx:         config.DefaultUserContext(),
+		authToken:       token,
+		httpClient:      httplib.NewSecureHTTPClient(cfg.Timeout),
+		streamProcessor: stream.NewProcessor(),
 	}, nil
 }
 
@@ -81,8 +66,8 @@ func (c *Client) Chat(ctx context.Context, message string) (string, error) {
 }
 
 // ChatStream implements the client interface
-func (c *Client) ChatStream(ctx context.Context, message string, callback StreamCallback) (string, error) {
-	systemPrompt := Message{
+func (c *Client) ChatStream(ctx context.Context, message string, callback types.StreamCallback) (string, error) {
+	systemPrompt := types.Message{
 		Role: "system",
 		Content: `Ты ZeroWorkflow AI - помощник разработчика. 
 Отвечай кратко и по делу на русском языке.
@@ -90,22 +75,22 @@ func (c *Client) ChatStream(ctx context.Context, message string, callback Stream
 Для блоков кода используй тройные бэктики с указанием языка: ` + "```язык\nкод\n```",
 	}
 
-	userMessage := Message{
+	userMessage := types.Message{
 		Role:    "user",
 		Content: message,
 	}
 
-	messages := []Message{systemPrompt, userMessage}
+	messages := []types.Message{systemPrompt, userMessage}
 	return c.ChatStreamWithMessages(ctx, messages, callback)
 }
 
 // ChatWithMessages implements the client interface
-func (c *Client) ChatWithMessages(ctx context.Context, messages []Message) (string, error) {
+func (c *Client) ChatWithMessages(ctx context.Context, messages []types.Message) (string, error) {
 	return c.ChatStreamWithMessages(ctx, messages, nil)
 }
 
 // ChatStreamWithMessages implements the client interface
-func (c *Client) ChatStreamWithMessages(ctx context.Context, messages []Message, callback StreamCallback) (string, error) {
+func (c *Client) ChatStreamWithMessages(ctx context.Context, messages []types.Message, callback types.StreamCallback) (string, error) {
 	chatID, err := c.createNewChat(ctx, messages[len(messages)-1].Content)
 	if err != nil {
 		return "", fmt.Errorf("failed to create chat: %w", err)
@@ -160,12 +145,12 @@ func (c *Client) createNewChat(ctx context.Context, firstMessage string) (string
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return "", errors.NewAIError("marshal", "failed to marshal chat payload", "")
+		return "", errors.NewValidationError("payload", payload, "failed to marshal chat payload")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.config.APIBaseURL+"/v1/chats/new", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", errors.NewAIError("request", "failed to create request", "")
+		return "", errors.NewNetworkError("failed to create request", "", c.config.APIBaseURL+"/v1/chats/new", 0, err)
 	}
 
 	c.setHeaders(req, "")
@@ -174,25 +159,25 @@ func (c *Client) createNewChat(ctx context.Context, firstMessage string) (string
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", errors.NewAIError("network", "failed to send request", "")
+		return "", errors.NewNetworkError("failed to send request", "", c.config.APIBaseURL+"/v1/chats/new", 0, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", errors.NewAPIError(resp.StatusCode, string(body), "", "/v1/chats/new")
+		return "", errors.NewNetworkError("API request failed", "", c.config.APIBaseURL+"/v1/chats/new", resp.StatusCode, fmt.Errorf(string(body)))
 	}
 
 	var chatResp ChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", errors.NewAIError("decode", "failed to decode chat response", "")
+		return "", errors.NewValidationError("response", nil, "failed to decode chat response")
 	}
 
 	return chatResp.ID, nil
 }
 
 // sendMessageStream sends messages and streams the response
-func (c *Client) sendMessageStream(ctx context.Context, chatID string, messages []Message, callback StreamCallback) (string, error) {
+func (c *Client) sendMessageStream(ctx context.Context, chatID string, messages []types.Message, callback types.StreamCallback) (string, error) {
 	requestID := uuid.New().String()
 
 	payload := map[string]interface{}{
@@ -210,96 +195,30 @@ func (c *Client) sendMessageStream(ctx context.Context, chatID string, messages 
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return "", errors.NewAIError("marshal", "failed to marshal message payload", requestID)
+		return "", errors.NewValidationError("payload", payload, "failed to marshal message payload")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.config.APIBaseURL+"/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", errors.NewAIError("request", "failed to create request", requestID)
+		return "", errors.NewNetworkError("failed to create request", requestID, c.config.APIBaseURL+"/chat/completions", 0, err)
 	}
 
 	c.setHeaders(req, chatID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", errors.NewAIError("network", "failed to send request", requestID)
+		return "", errors.NewNetworkError("failed to send request", requestID, c.config.APIBaseURL+"/chat/completions", 0, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", errors.NewAPIError(resp.StatusCode, string(body), requestID, "/chat/completions")
+		return "", errors.NewNetworkError("API request failed", requestID, c.config.APIBaseURL+"/chat/completions", resp.StatusCode, fmt.Errorf(string(body)))
 	}
 
-	return c.parseStreamResponse(resp.Body, callback)
+	return c.streamProcessor.ProcessStream(resp.Body, callback)
 }
 
-// parseStreamResponse parses SSE stream with optimized buffering
-func (c *Client) parseStreamResponse(reader io.Reader, callback StreamCallback) (string, error) {
-	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, bufferSize), bufferSize*2)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			return c.cleanResponse(fullResponse.String()), nil
-		}
-
-		var chunk StreamChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			continue // Skip invalid JSON
-		}
-
-		if chunk.Type == "chat:completion" && chunk.Data.DeltaContent != "" {
-			if callback != nil {
-				callback(chunk.Data.DeltaContent)
-			}
-			fullResponse.WriteString(chunk.Data.DeltaContent)
-		}
-
-		if chunk.Data.Done {
-			return c.cleanResponse(fullResponse.String()), nil
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", errors.NewStreamError("parsing", fmt.Sprintf("failed to read stream: %v", err))
-	}
-
-	return c.cleanResponse(fullResponse.String()), nil
-}
-
-// cleanResponse normalizes and cleans the response text
-func (c *Client) cleanResponse(text string) string {
-	if text == "" {
-		return ""
-	}
-
-	// Normalize line endings
-	cleaned := strings.ReplaceAll(text, "\r\n", "\n")
-	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
-	cleaned = strings.TrimSpace(cleaned)
-
-	// Balance triple backticks
-	fenceCount := strings.Count(cleaned, "```")
-	if fenceCount%2 == 1 {
-		cleaned += "\n```"
-	}
-
-	// Limit consecutive newlines
-	for strings.Contains(cleaned, "\n\n\n\n") {
-		cleaned = strings.ReplaceAll(cleaned, "\n\n\n\n", "\n\n\n")
-	}
-
-	return cleaned
-}
 
 // Helper methods for building request components
 

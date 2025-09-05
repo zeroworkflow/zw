@@ -136,5 +136,5 @@ make dev
 ---
 
 <div align="center">
-  <strong>Создано с ❤️ <a href="https://github.com/derxanax">@derxanax</a></strong>
+  <strong>Создано ☃️ <a href="https://github.com/derxanax">@derxanax</a></strong>
 </div>
