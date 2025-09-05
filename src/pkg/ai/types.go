@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"zero-workflow/src/pkg/interfaces"
-	"zero-workflow/src/pkg/types"
 )
 
 // Client defines the interface for AI clients (alias for interfaces.AIClient)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"zero-workflow/src/internal/config"
@@ -70,107 +69,64 @@ func runAsk(cmd *cobra.Command, args []string) {
 	askQuestion(client, renderer, question, fileList, errorHandler)
 }
 
-// streamingPrinter handles progressive Markdown rendering during streaming
-type streamingPrinter struct {
-	renderer     *renderer.MarkdownRenderer
-	buffer       strings.Builder
-	lastLines    int
-	lastUpdate   time.Time
-	throttle     time.Duration
-}
-
-func newStreamingPrinter(r *renderer.MarkdownRenderer) *streamingPrinter {
-	return &streamingPrinter{
-		renderer: r,
-		throttle: 80 * time.Millisecond,
-	}
-}
-
-func (p *streamingPrinter) onDelta(delta string) {
-	p.buffer.WriteString(delta)
-	now := time.Now()
-	
-	// Force render on newlines or after throttle period
-	shouldRender := strings.Contains(delta, "\n") || now.Sub(p.lastUpdate) >= p.throttle
-	if shouldRender {
-		p.render()
-		p.lastUpdate = now
-	}
-}
-
-func (p *streamingPrinter) render() {
-	content := p.renderer.RenderMarkdown(p.buffer.String())
-	lines := strings.Count(content, "\n")
-	
-	// Clear previous output by moving cursor up and clearing
-	if p.lastLines > 0 {
-		fmt.Printf("\x1b[%dA\r\x1b[J", p.lastLines)
-	}
-	
-	fmt.Print(content)
-	p.lastLines = lines
-}
-
-func (p *streamingPrinter) flush() {
-	p.render()
-	fmt.Println()
-}
-
 func askQuestion(client *zai.Client, renderer *renderer.MarkdownRenderer, question string, filePaths []string, errorHandler *handlers.ErrorHandler) {
-    spinnerHandler := handlers.NewSpinnerHandler("Thinking")
+	spinnerHandler := handlers.NewSpinnerHandler("Thinking")
+	var response string
+	var err error
 
-    err := spinnerHandler.WithSpinner(func() error {
-        // Process files if provided
-        fileContext, err := processFiles(filePaths, errorHandler)
-        if err != nil {
-            return err
-        }
-        
-        // Combine question with file context
-        fullQuestion := question + fileContext
-        
-        // Create streaming printer for progressive rendering
-        printer := newStreamingPrinter(renderer)
-        
-        // Stream with progressive Markdown rendering
-        ctx := context.Background()
-        _, err = client.ChatStream(ctx, fullQuestion, printer.onDelta)
-        if err != nil {
-            return err
-        }
-        
-        // Final flush to ensure everything is rendered
-        printer.flush()
-        
-        return nil
-    })
+	err = spinnerHandler.WithSpinner(func() error {
+		// Process files if provided
+		fileContext, processErr := processFiles(filePaths, errorHandler)
+		if processErr != nil {
+			return processErr
+		}
 
-    if err != nil {
-        errorHandler.HandleFatalError(err, "question processing")
-    }
+		// Combine question with file context
+		fullQuestion := question + fileContext
+
+		ctx := context.Background()
+		// The callback is now empty, as we are not printing live deltas.
+		// The final complete response is returned by ChatStream.
+		response, err = client.ChatStream(ctx, fullQuestion, func(delta string) {
+			// Do nothing here to prevent raw output
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		errorHandler.HandleFatalError(err, "question processing")
+	}
+
+	// After the spinner has stopped, render and print the complete response
+	if response != "" {
+		finalRendered := renderer.RenderMarkdown(response)
+		fmt.Println(finalRendered)
+	}
 }
 
 // processFiles handles file processing logic
 func processFiles(filePaths []string, errorHandler *handlers.ErrorHandler) (string, error) {
-    if len(filePaths) == 0 {
-        return "", nil
-    }
+	if len(filePaths) == 0 {
+		return "", nil
+	}
 
-    fileReader := files.NewReader()
-    
-    if err := fileReader.ValidateFiles(filePaths); err != nil {
-        return "", fmt.Errorf("file validation error: %w", err)
-    }
-    
-    fileContents, err := fileReader.ReadFiles(filePaths)
-    if err != nil {
-        return "", fmt.Errorf("error reading files: %w", err)
-    }
-    
-    fmt.Printf("\n[*] Loaded %d file(s) for context\n", len(fileContents))
-    return fileReader.FormatFilesForAI(fileContents), nil
+	fileReader := files.NewReader()
+
+	if err := fileReader.ValidateFiles(filePaths); err != nil {
+		return "", fmt.Errorf("file validation error: %w", err)
+	}
+
+	fileContents, err := fileReader.ReadFiles(filePaths)
+	if err != nil {
+		return "", fmt.Errorf("error reading files: %w", err)
+	}
+
+	fmt.Printf("\n[*] Loaded %d file(s) for context\n", len(fileContents))
+	return fileReader.FormatFilesForAI(fileContents), nil
 }
-
 
 func runInteractiveMode(client *zai.Client, renderer *renderer.MarkdownRenderer, errorHandler *handlers.ErrorHandler) {
 	fmt.Println("ZeroWorkflow AI - Interactive Mode")

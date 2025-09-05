@@ -41,7 +41,6 @@ func (s *RightSpinner) Start() {
 	}
 	
 	s.active = true
-	s.setScrollRegion() // Reserve top line for spinner
 	s.wg.Add(1)
 	go s.animate()
 }
@@ -60,7 +59,6 @@ func (s *RightSpinner) Stop() {
 	// Wait for goroutine to finish
 	s.wg.Wait()
 	s.clearTopRight()
-	s.resetScrollRegion() // Reset scroll region to full screen
 }
 
 func (s *RightSpinner) animate() {
