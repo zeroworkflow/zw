@@ -3,7 +3,10 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds application configuration
@@ -69,8 +72,46 @@ func ValidateToken(token string) error {
 	return nil
 }
 
+// LoadEnv loads environment variables from .env file if it exists
+func LoadEnv() error {
+	// Try to find .env file in current directory and parent directories
+	envPaths := []string{
+		".env",
+		"../.env",
+		"../../.env",
+	}
+
+	for _, envPath := range envPaths {
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Load(envPath); err != nil {
+				return fmt.Errorf("failed to load %s: %w", envPath, err)
+			}
+			return nil
+		}
+	}
+
+	// Try to find .env in executable directory
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		envPath := filepath.Join(execDir, ".env")
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Load(envPath); err != nil {
+				return fmt.Errorf("failed to load %s: %w", envPath, err)
+			}
+			return nil
+		}
+	}
+
+	// .env file not found, but that's okay
+	return nil
+}
+
 // GetToken retrieves and validates AI token from environment
 func GetToken() (string, error) {
+	// Try to load .env file first
+	LoadEnv()
+
 	token := os.Getenv("AI_TOKEN")
 	if err := ValidateToken(token); err != nil {
 		return "", err
