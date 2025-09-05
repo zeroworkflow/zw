@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -166,11 +165,10 @@ type StreamChunk struct {
 	} `json:"data"`
 }
 
-func NewClient() *Client {
-	token := os.Getenv("AI_TOKEN")
-	if token == "" {
-		fmt.Fprintf(os.Stderr, "Error: AI_TOKEN environment variable not set\n")
-		os.Exit(1)
+func NewClient() (*Client, error) {
+	token, err := GetToken()
+	if err != nil {
+		return nil, fmt.Errorf("AI token not found. Please run 'zw ai login' to configure it: %w", err)
 	}
 
 	return &Client{
@@ -180,7 +178,7 @@ func NewClient() *Client {
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
-	}
+	}, nil
 }
 
 func (c *Client) createNewChat(firstMessage string) (string, error) {
