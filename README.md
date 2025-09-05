@@ -6,8 +6,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-brightgreen?style=flat-square)](LICENSE)
-[![Build Status](https://img.shields.io/badge/Build-Passing-success?style=flat-square)](https://github.com/derxanax/ZeroWorkflow)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square)](https://github.com/derxanax/ZeroWorkflow/releases)
+[![Version](https://img.shields.io/badge/Version-0.0.1-?style=flat-square)](https://github.com/derxanax/ZeroWorkflow/releases)
 
 > AI-powered developer tools suite for streamlined workflow automation
 
@@ -21,93 +20,43 @@ ZeroWorkflow is a collection of AI-powered command-line utilities designed to au
 - **Beautiful Terminal UI** - Rich markdown rendering with code highlighting
 - **Cross-Platform** - Single binary deployment
 
+## 🌐 Supported Platforms
+
+[![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)](https://www.linux.org/)
+[![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows/)
+
 ## 🚀 Quick Start
 
 ### Installation
 
 #### Quick Install (Recommended)
 ```bash
-# Clone the repository
-git clone https://github.com/derxanax/ZeroWorkflow.git
-cd ZeroWorkflow
-
-# Run the installation script
-./install.sh
+# Download and install the latest release
+curl -L https://github.com/zeroworkflow/zw/releases/download/v1.0.9/install.sh | bash
 ```
 
-#### Manual Installation
+#### Manual Download
+Download the binary for your platform from [Releases](https://github.com/zeroworkflow/zw/releases/latest):
+- **Linux AMD64**: `zw-linux-amd64`
+
 ```bash
-# Clone the repository
-git clone https://github.com/derxanax/ZeroWorkflow.git
-cd ZeroWorkflow
+# Download binary
+curl -L -o zw https://github.com/zeroworkflow/zw/releases/download/v1.0.9/zw-linux-amd64
 
-# Build and install using Makefile
-make install
-
-# Or build locally
-make build
+# Make executable and install
+chmod +x zw
+sudo mv zw /usr/local/bin/
 ```
-
-#### Alternative Methods
-```bash
-# Build manually
-go build -o zw src/main.go
-
-# Install to GOPATH/bin
-go install
-```
-
 ### Setup
 
-1. **Automatic setup** (if using install script):
+1. **Automatic setup** :
    - The installer creates a `.env` template file
    - Edit `.env` and add your AI token
 
-2. **Manual setup**:
-   ```bash
-   # Create .env file
-   echo "AI_TOKEN=your_ai_token_here" > .env
-   
-   # Or set environment variable
-   export AI_TOKEN="your_ai_token_here"
-   ```
-
-3. **Get your AI token**:
+2. **Get your AI token**:
    - Visit [Z.ai](https://chat.z.ai) to get your API token
    - Add it to `.env` file or set as environment variable
-
-### Usage
-
-```bash
-# Ask AI a question (if installed globally)
-zw ask "How to create a REST API in Go?"
-
-# Include files for context
-zw ask "Review my code" --file main.go
-zw ask "Explain this" -f src/server.go -f config/app.yaml
-
-# Interactive mode for continuous conversation
-zw ask -i
-
-# Get help
-zw --help
-zw ask --help
-
-# Local usage (if not installed globally)
-./zw ask "your question" --file example.go
-```
-
-#### Using Makefile
-```bash
-# Build and run
-make run-ask ARGS="How to create a Go struct?"
-
-# Interactive mode
-make run-interactive
-
-# See all available commands
-make help
-```
 
 ## 🛠 Commands
 
@@ -117,18 +66,15 @@ Interactive AI assistant with markdown rendering and syntax highlighting.
 
 **Examples:**
 ```bash
-# Single question
-zw ask "Explain Go interfaces"
+# Ask a question
+zw ask "How to create a REST API in Go?"
 
-# Ask about specific files
-zw ask "Review this code" --file src/main.go
-zw ask "Explain this function" -f utils.go -f config.go
+# Include files for context
+zw ask "Review my code" --file main.go
+zw ask "Explain this function" -f utils.go
 
 # Interactive mode
 zw ask -i
-> What are Go channels?
-> How to handle errors in Go?
-> exit
 ```
 
 **Features:**
@@ -162,26 +108,6 @@ ZeroWorkflow/
 └── .env                   # Environment variables (create manually)
 ```
 
-## 🎨 Features
-
-### Syntax Highlighting
-- **50+ Languages** supported via Chroma
-- **Terminal-optimized** color schemes
-- **Code block borders** with language labels
-- **Inline code** highlighting
-
-### AI Integration
-- **Z.ai GLM-4.5** model integration
-- **Streaming responses** for real-time output
-- **Context preservation** in interactive mode
-- **Error handling** with graceful fallbacks
-
-### Terminal UI
-- **Rich formatting** with colors and styles
-- **Responsive design** adapts to terminal width
-- **Progress indicators** during AI processing
-- **Clean, modern** interface design
-
 ## 🔧 Development
 
 ### Prerequisites
@@ -209,29 +135,11 @@ make test
 make dev
 ```
 
-#### Manual Build
-```bash
-# Install dependencies
-go mod tidy
-
-# Build
-go build -o zw src/main.go
-
-# Run tests
-go test ./...
-```
-
 ### Adding New Commands
 1. Create new command file in `src/cmd/`
 2. Implement command logic
 3. Register with root command
 4. Add documentation
-
-## 🌐 Supported Platforms
-
-[![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)](https://www.linux.org/)
-[![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows/)
 
 ## 📚 Documentation
 
@@ -240,26 +148,9 @@ go test ./...
 - [Configuration](doc/config.md) - Environment setup and configuration
 - [Contributing](doc/contributing.md) - Development guidelines
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](doc/contributing.md) for details.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Z.ai** for providing the AI API
-- **Chroma** for syntax highlighting
-- **Cobra** for CLI framework
-- **Go Community** for excellent tooling
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.s
 
 ---
 
