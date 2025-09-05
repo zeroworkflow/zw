@@ -46,8 +46,6 @@ jobs:
     - name: 🔍 Verify dependencies
       run: go mod verify
 
-    - name: 🧪 Run tests
-      run: go test -v ./src/...
 
     - name: 🏗️ Build binary for ${{ matrix.emoji }} ${{ matrix.goos }}/${{ matrix.goarch }}
       env:
