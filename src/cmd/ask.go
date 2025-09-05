@@ -35,16 +35,11 @@ func init() {
 }
 
 func runAsk(cmd *cobra.Command, args []string) {
-	service, err := ai.NewService()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Hint: run 'zw ai login' to configure your AI token.\n")
-		os.Exit(1)
-	}
+	client := ai.NewClient()
 	renderer := renderer.NewMarkdownRenderer()
 
 	if interactive {
-		runInteractiveMode(service, renderer)
+		runInteractiveMode(client, renderer)
 		return
 	}
 
@@ -55,51 +50,51 @@ func runAsk(cmd *cobra.Command, args []string) {
 	}
 
 	question := strings.Join(args, " ")
-	askQuestion(service, renderer, question)
+	askQuestion(client, renderer, question)
 }
 
-func askQuestion(service *ai.Service, renderer *renderer.MarkdownRenderer, question string) {
-	// Fixed top-right spinner during real streaming
-	spinner := ui.NewRightSpinner("Thinking")
-	spinner.Start()
+func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, question string) {
+    // Fixed top-right spinner during real streaming
+    spinner := ui.NewRightSpinner("Thinking")
+    spinner.Start()
 
-	var rawBuilder strings.Builder
+    var rawBuilder strings.Builder
 
-	// Stream deltas and print them as raw text during streaming
-	response, err := service.AskStream(question, func(delta string) {
-		rawBuilder.WriteString(delta)
-		fmt.Print(delta)
-	})
+    // Stream deltas and print them as raw text during streaming
+    response, err := client.ChatStream(question, func(delta string) {
+        rawBuilder.WriteString(delta)
+        fmt.Print(delta)
+    })
 
-	// Stop spinner
-	spinner.Stop()
+    // Stop spinner
+    spinner.Stop()
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
-		os.Exit(1)
-	}
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+        os.Exit(1)
+    }
 
-	// After streaming is complete, replace raw output with rendered markdown
-	if response != "" {
-		// Count lines in the raw output to know how much to clear
-		rawOutput := rawBuilder.String()
-		lines := strings.Count(rawOutput, "\n")
-		
-		// Move cursor up and clear the raw output
-		if lines > 0 {
-			fmt.Printf("\x1b[%dA", lines)
-		}
-		fmt.Print("\r\x1b[J")
-		
-		// Print the beautifully rendered version
-		finalRendered := renderer.RenderMarkdown(response)
-		fmt.Print(finalRendered)
-	}
-	
-	fmt.Println("")
+    // After streaming is complete, replace raw output with rendered markdown
+    if response != "" {
+        // Count lines in the raw output to know how much to clear
+        rawOutput := rawBuilder.String()
+        lines := strings.Count(rawOutput, "\n")
+        
+        // Move cursor up and clear the raw output
+        if lines > 0 {
+            fmt.Printf("\x1b[%dA", lines)
+        }
+        fmt.Print("\r\x1b[J")
+        
+        // Print the beautifully rendered version
+        finalRendered := renderer.RenderMarkdown(response)
+        fmt.Print(finalRendered)
+    }
+    
+    fmt.Println("")
 }
 
-func runInteractiveMode(service *ai.Service, renderer *renderer.MarkdownRenderer) {
+func runInteractiveMode(client *ai.Client, renderer *renderer.MarkdownRenderer) {
 	fmt.Println("ZeroWorkflow AI - Interactive Mode")
 	fmt.Println("Type your questions and press Enter. Type 'exit' or 'quit' to leave.")
 	fmt.Println(strings.Repeat("─", 60))
@@ -124,7 +119,7 @@ func runInteractiveMode(service *ai.Service, renderer *renderer.MarkdownRenderer
 			break
 		}
 		
-		askQuestion(service, renderer, input)
+		askQuestion(client, renderer, input)
 	}
 	
 	if err := scanner.Err(); err != nil {
