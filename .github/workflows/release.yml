@@ -122,6 +122,7 @@ jobs:
         echo "## 🚀 Quick Start" >> CHANGELOG.md
         echo '```bash' >> CHANGELOG.md
         echo "# Set your AI token" >> CHANGELOG.md
+        echo "  - Free keys [zw-free keys](https://github.com/zeroworkflow/zw-keys)"
         echo 'export AI_TOKEN="your_token_here"' >> CHANGELOG.md
         echo "" >> CHANGELOG.md
         echo "# Ask AI a question" >> CHANGELOG.md
