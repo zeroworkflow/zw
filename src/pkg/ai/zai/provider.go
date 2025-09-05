@@ -2,6 +2,7 @@ package zai
 
 import (
 	"zero-workflow/src/internal/config"
+	"zero-workflow/src/pkg/ai"
 )
 
 // Provider implements the AI provider for Z.ai
@@ -13,7 +14,7 @@ func NewProvider() *Provider {
 }
 
 // CreateClient creates a new Z.ai client with the given token
-func (p *Provider) CreateClient(token string) (*Client, error) {
+func (p *Provider) CreateClient(token string) (ai.Client, error) {
 	return NewClient(token)
 }
 
