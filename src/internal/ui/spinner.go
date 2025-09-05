@@ -15,6 +15,7 @@ type RightSpinner struct {
 	active   bool
 	stopChan chan bool
 	doneChan chan bool
+	lastLen  int
 }
 
 func NewRightSpinner(text string) *RightSpinner {
@@ -36,15 +37,12 @@ func (s *RightSpinner) Stop() {
 		s.active = false
 		s.stopChan <- true
 		<-s.doneChan
-		fmt.Print("\r\033[K") // Clear the line
+		s.clearTopRight()
 	}
 }
 
 func (s *RightSpinner) animate() {
 	frameIndex := 0
-	dotIndex := 0
-	dots := []string{"", ".", "..", "..."}
-	
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -54,29 +52,8 @@ func (s *RightSpinner) animate() {
 			s.doneChan <- true
 			return
 		case <-ticker.C:
-			// Get terminal width
-			width := s.getTerminalWidth()
-			
-			// Create left part with text and dots
-			leftText := s.text + dots[dotIndex%len(dots)]
-			
-			// Create right part with spinner
-			rightText := fmt.Sprintf("[%s]", s.frames[frameIndex%len(s.frames)])
-			
-			// Calculate spaces needed
-			spacesNeeded := width - len(leftText) - len(rightText) - 1
-			if spacesNeeded < 1 {
-				spacesNeeded = 1
-			}
-			
-			// Create the full line
-			line := fmt.Sprintf("\r%s%s%s", leftText, strings.Repeat(" ", spacesNeeded), rightText)
-			fmt.Print(line)
-			
+			s.drawTopRight(s.text, s.frames[frameIndex%len(s.frames)])
 			frameIndex++
-			if frameIndex%3 == 0 { // Change dots every 3 frame changes
-				dotIndex++
-			}
 		}
 	}
 }
@@ -87,4 +64,55 @@ func (s *RightSpinner) getTerminalWidth() int {
 		return 80 // Default width if can't detect
 	}
 	return width
+}
+
+func (s *RightSpinner) getTerminalHeight() int {
+	_, height, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 24
+	}
+	return height
+}
+
+func (s *RightSpinner) drawTopRight(label, frame string) {
+	width := s.getTerminalWidth()
+	content := fmt.Sprintf("%s [%s]", label, frame)
+	col := width - len(content) + 1
+	if col < 1 {
+		col = 1
+	}
+
+	// Save cursor, move to row 1, col, draw, restore
+	fmt.Print("\x1b7")
+	fmt.Printf("\x1b[%d;%dH", 1, col)
+	fmt.Print(content)
+	// Track last length to clear on Stop
+	s.lastLen = len(content)
+	fmt.Print("\x1b8")
+}
+
+func (s *RightSpinner) clearTopRight() {
+	width := s.getTerminalWidth()
+	col := width - s.lastLen + 1
+	if col < 1 {
+		col = 1
+	}
+	fmt.Print("\x1b7")
+	fmt.Printf("\x1b[%d;%dH", 1, col)
+	fmt.Print(strings.Repeat(" ", s.lastLen))
+	fmt.Print("\x1b8")
+}
+
+func (s *RightSpinner) setScrollRegion() {
+	rows := s.getTerminalHeight()
+	if rows < 2 {
+		return
+	}
+	// Reserve top line (row 1) outside of the scroll region so it never scrolls
+	fmt.Printf("\x1b[%d;%dr", 2, rows)
+}
+
+func (s *RightSpinner) resetScrollRegion() {
+	// Reset scroll region to full screen
+	fmt.Print("\x1b[r")
 }

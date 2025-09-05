@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,127 @@ type Client struct {
 	authToken string
 	userAgent string
 	httpClient *http.Client
+}
+
+// SendMessageStream sends messages and streams deltas via onDelta callback while also returning the final message.
+func (c *Client) SendMessageStream(chatID string, messages []Message, onDelta func(string)) (string, error) {
+	requestID := uuid.New().String()
+
+	payload := map[string]interface{}{
+		"stream":  true,
+		"model":   "0727-360B-API",
+		"messages": messages,
+		"params": map[string]interface{}{
+			"temperature":  0.8,
+			"top_p":       0.95,
+			"max_tokens":  4000,
+		},
+		"tool_servers": []string{},
+		"features": map[string]interface{}{
+			"image_generation":  false,
+			"code_interpreter":  false,
+			"web_search":       false,
+			"auto_web_search":  false,
+			"preview_mode":     true,
+			"flags":           []string{},
+			"features": []map[string]interface{}{
+				{"type": "mcp", "server": "vibe-coding", "status": "hidden"},
+				{"type": "mcp", "server": "ppt-maker", "status": "hidden"},
+				{"type": "mcp", "server": "image-search", "status": "hidden"},
+			},
+			"enable_thinking": false,
+		},
+		"variables": map[string]string{
+			"{{USER_NAME}}":        "Developer",
+			"{{USER_LOCATION}}":    "Russia",
+			"{{CURRENT_DATETIME}}": time.Now().Format("2006-01-02 15:04:05"),
+			"{{CURRENT_DATE}}":     time.Now().Format("2006-01-02"),
+			"{{CURRENT_TIME}}":     time.Now().Format("15:04:05"),
+			"{{CURRENT_WEEKDAY}}":  time.Now().Weekday().String(),
+			"{{CURRENT_TIMEZONE}}": "Europe/Moscow",
+			"{{USER_LANGUAGE}}":    "ru-RU",
+		},
+		"model_item": map[string]interface{}{
+			"id":       "0727-360B-API",
+			"name":     "GLM-4.5",
+			"owned_by": "openai",
+		},
+		"chat_id": chatID,
+		"id":      requestID,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.authToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Origin", "https://chat.z.ai")
+	req.Header.Set("Referer", "https://chat.z.ai/c/"+chatID)
+	req.Header.Set("X-FE-Version", "prod-fe-1.0.57")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return c.parseStreamResponseStream(resp.Body, onDelta)
+}
+
+// parseStreamResponseStream parses SSE stream, calls onDelta for each token, and returns the final cleaned response.
+func (c *Client) parseStreamResponseStream(reader io.Reader, onDelta func(string)) (string, error) {
+	var fullResponse strings.Builder
+	bufReader := bufio.NewReader(reader)
+
+	for {
+		line, err := bufReader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", fmt.Errorf("failed to read response: %w", err)
+		}
+
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				return c.cleanResponse(fullResponse.String()), nil
+			}
+
+			var chunk StreamChunk
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				// Skip invalid JSON
+			} else {
+				if chunk.Type == "chat:completion" && chunk.Data.DeltaContent != "" {
+					if onDelta != nil {
+						onDelta(chunk.Data.DeltaContent)
+					}
+					fullResponse.WriteString(chunk.Data.DeltaContent)
+				}
+				if chunk.Data.Done {
+					return c.cleanResponse(fullResponse.String()), nil
+				}
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
+
+	return c.cleanResponse(fullResponse.String()), nil
 }
 
 type Message struct {
@@ -310,4 +432,27 @@ func (c *Client) Chat(message string) (string, error) {
 
 	messages := []Message{systemPrompt, userMessage}
 	return c.SendMessage(chatID, messages)
+}
+
+func (c *Client) ChatStream(message string, onDelta func(string)) (string, error) {
+	chatID, err := c.createNewChat(message)
+	if err != nil {
+		return "", fmt.Errorf("failed to create chat: %w", err)
+	}
+
+	systemPrompt := Message{
+		Role: "system",
+		Content: `Ты ZeroWorkflow AI - помощник разработчика. 
+Отвечай кратко и по делу на русском языке.
+Используй markdown для форматирования.
+Для блоков кода используй тройные бэктики с указанием языка: ` + "```язык\nкод\n```",
+	}
+
+	userMessage := Message{
+		Role:    "user",
+		Content: message,
+	}
+
+	messages := []Message{systemPrompt, userMessage}
+	return c.SendMessageStream(chatID, messages, onDelta)
 }

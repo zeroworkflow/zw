@@ -16,6 +16,40 @@ type MarkdownRenderer struct {
 	style *chroma.Style
 }
 
+// processOpenCodeBlock detects a trailing, not-yet-closed code block and renders it as a box
+// so that users can see syntax highlighting during streaming before the closing ``` arrives.
+func (r *MarkdownRenderer) processOpenCodeBlock(content string) string {
+    // Quick check: odd number of ``` suggests an open block
+    if strings.Count(content, "```")%2 == 0 {
+        return content
+    }
+    // Find the last opening ``` position
+    idx := strings.LastIndex(content, "```")
+    if idx == -1 {
+        return content
+    }
+
+    // Extract language line after ``` up to newline
+    rest := content[idx+3:]
+    newline := strings.IndexByte(rest, '\n')
+    if newline == -1 {
+        // No newline after language, cannot determine code yet
+        return content
+    }
+    lang := strings.TrimSpace(rest[:newline])
+    code := rest[newline+1:]
+
+    // Render everything before the open block as usual, and the open block as a formatted box
+    before := content[:idx]
+    rendered := r.formatCodeBlock(code, lang)
+    return before + rendered
+}
+
+// HighlightCode exposes syntax highlighting to be used by streaming renderer
+func (r *MarkdownRenderer) HighlightCode(code, lang string) string {
+    return r.highlightCode(code, lang)
+}
+
 func NewMarkdownRenderer() *MarkdownRenderer {
 	return &MarkdownRenderer{
 		style: styles.Get("github"),
@@ -24,13 +58,15 @@ func NewMarkdownRenderer() *MarkdownRenderer {
 
 // RenderMarkdown renders markdown with syntax highlighting for code blocks
 func (r *MarkdownRenderer) RenderMarkdown(content string) string {
-	// Process code blocks first
-	content = r.processCodeBlocks(content)
-	
-	// Process other markdown elements
-	content = r.processMarkdownElements(content)
-	
-	return content
+    // Process code blocks first
+    content = r.processCodeBlocks(content)
+    // Handle an open (not yet closed) trailing code block for streaming
+    content = r.processOpenCodeBlock(content)
+    
+    // Process other markdown elements
+    content = r.processMarkdownElements(content)
+    
+    return content
 }
 
 // processCodeBlocks finds and syntax highlights code blocks
@@ -87,7 +123,7 @@ func (r *MarkdownRenderer) highlightCode(code, lang string) string {
 	return buf.String()
 }
 
-// formatCodeBlock formats a code block with borders and language label using simple borders
+// formatCodeBlock formats a code block with borders and language label using box drawing characters
 func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	// Apply syntax highlighting first if language is specified
 	highlightedCode := code
@@ -98,6 +134,15 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	// Split into lines for border rendering
 	lines := strings.Split(highlightedCode, "\n")
 	
+	// Remove empty trailing lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	
+	if len(lines) == 0 {
+		return ""
+	}
+	
 	// Calculate max display width (accounting for ANSI codes)
 	maxWidth := 0
 	for _, line := range lines {
@@ -107,46 +152,66 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 		}
 	}
 	
-	// Determine inner content width (visible code area between the two inner spaces)
-	innerWidth := maxWidth
-	if innerWidth < 40 {
-		innerWidth = 40
+	// Determine inner content width with better sizing
+	innerWidth := maxWidth + 2 // Add some padding
+	if innerWidth < 50 {
+		innerWidth = 50
 	}
-	if innerWidth > 80 {
-		innerWidth = 80
+	if innerWidth > 100 {
+		innerWidth = 100
 	}
-	// Total width of the box including borders and inner spaces: "│ " + content + " │"
-	totalWidth := innerWidth + 4
 	
 	var result strings.Builder
+	borderColor := color.New(color.FgCyan, color.Bold)
 	
 	// Top border with language
 	if lang != "" {
 		langLabel := " " + lang + " "
-		// "╭─" + label + repeat + "╮" -> totalWidth should match the interior width
-		topBorder := "╭─" + langLabel + strings.Repeat("─", totalWidth-len(langLabel)-3) + "╮"
-		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
+		dashCount := innerWidth - len(langLabel)
+		if dashCount < 0 {
+			dashCount = 0
+		}
+		topBorder := "╭─" + langLabel + strings.Repeat("─", dashCount) + "╮"
+		result.WriteString(borderColor.Sprint(topBorder) + "\n")
 	} else {
-		topBorder := "╭" + strings.Repeat("─", totalWidth-2) + "╮"
-		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
+		topBorder := "╭" + strings.Repeat("─", innerWidth) + "╮"
+		result.WriteString(borderColor.Sprint(topBorder) + "\n")
 	}
 	
-	// Content lines
+	// Content lines with proper padding
 	for _, line := range lines {
 		displayWidth := r.getDisplayWidth(line)
 		padding := innerWidth - displayWidth
 		if padding < 0 {
+			// Truncate line if too long
+			line = r.truncateLine(line, innerWidth)
 			padding = 0
 		}
-		result.WriteString(color.New(color.FgCyan).Sprint("│ ") + line +
-			strings.Repeat(" ", padding) + color.New(color.FgCyan).Sprint(" │") + "\n")
+		
+		leftBorder := borderColor.Sprint("│ ")
+		rightBorder := borderColor.Sprint(" │")
+		result.WriteString(leftBorder + line + strings.Repeat(" ", padding) + rightBorder + "\n")
 	}
 	
 	// Bottom border
-	bottomBorder := "╰" + strings.Repeat("─", totalWidth-2) + "╯"
-	result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(bottomBorder) + "\n")
+	bottomBorder := "╰" + strings.Repeat("─", innerWidth) + "╯"
+	result.WriteString(borderColor.Sprint(bottomBorder) + "\n")
 	
 	return result.String()
+}
+
+// truncateLine truncates a line to fit within the specified width, preserving ANSI codes
+func (r *MarkdownRenderer) truncateLine(text string, maxWidth int) string {
+	if r.getDisplayWidth(text) <= maxWidth {
+		return text
+	}
+	
+	// Simple truncation for now - could be improved to preserve ANSI codes better
+	cleaned := r.stripAnsiCodes(text)
+	if len(cleaned) > maxWidth-3 {
+		return cleaned[:maxWidth-3] + "..."
+	}
+	return cleaned
 }
 
 // getDisplayWidth calculates the display width of a string, ignoring ANSI escape sequences
@@ -161,8 +226,8 @@ func (r *MarkdownRenderer) getDisplayWidth(text string) int {
 
 // stripAnsiCodes removes ANSI escape sequences from text
 func (r *MarkdownRenderer) stripAnsiCodes(text string) string {
-	// Regex to match ANSI escape sequences
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	// Regex to match ANSI escape sequences including more complex ones
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 	return ansiRegex.ReplaceAllString(text, "")
 }
 

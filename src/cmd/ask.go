@@ -54,23 +54,44 @@ func runAsk(cmd *cobra.Command, args []string) {
 }
 
 func askQuestion(client *ai.Client, renderer *renderer.MarkdownRenderer, question string) {
-	// Create right-aligned spinner
-	spinner := ui.NewRightSpinner("Thinking")
-	spinner.Start()
-	
-	response, err := client.Chat(question)
-	
-	spinner.Stop()
-	
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+    // Fixed top-right spinner during real streaming
+    spinner := ui.NewRightSpinner("Thinking")
+    spinner.Start()
 
-	// Render the markdown response with syntax highlighting
-	rendered := renderer.RenderMarkdown(response)
-	fmt.Print(rendered)
-	fmt.Println()
+    var rawBuilder strings.Builder
+
+    // Stream deltas and print them as raw text during streaming
+    response, err := client.ChatStream(question, func(delta string) {
+        rawBuilder.WriteString(delta)
+        fmt.Print(delta)
+    })
+
+    // Stop spinner
+    spinner.Stop()
+
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+        os.Exit(1)
+    }
+
+    // After streaming is complete, replace raw output with rendered markdown
+    if response != "" {
+        // Count lines in the raw output to know how much to clear
+        rawOutput := rawBuilder.String()
+        lines := strings.Count(rawOutput, "\n")
+        
+        // Move cursor up and clear the raw output
+        if lines > 0 {
+            fmt.Printf("\x1b[%dA", lines)
+        }
+        fmt.Print("\r\x1b[J")
+        
+        // Print the beautifully rendered version
+        finalRendered := renderer.RenderMarkdown(response)
+        fmt.Print(finalRendered)
+    }
+    
+    fmt.Println("")
 }
 
 func runInteractiveMode(client *ai.Client, renderer *renderer.MarkdownRenderer) {
