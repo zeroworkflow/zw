@@ -75,6 +75,7 @@ zw ask -i "Help me debug this issue"
 ## Configuration
 
 The AI assistant requires a Z.ai API token. Configure it using:
+   - Free keys [zw-free keys](https://github.com/zeroworkflow/zw-keys)
 
 1. **Environment variable:**
    ```bash
@@ -95,6 +96,7 @@ Common errors and solutions:
 Error: ZAI_TOKEN not found
 ```
 **Solution:** Set your Z.ai API token in environment or `.env` file
+   - Free keys [zw-free keys](https://github.com/zeroworkflow/zw-keys)
 
 ### File Not Found
 ```

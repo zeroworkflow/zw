@@ -15,7 +15,6 @@
 ZeroWorkflow is a collection of AI-powered command-line utilities designed to automate common development tasks. Built with Go for maximum performance and cross-platform compatibility.
 
 **Key Features:**
-- **AI Chat Assistant** - Interactive AI conversations with syntax highlighting
 - **Modular Architecture** - Easy to extend with new commands
 - **Beautiful Terminal UI** - Rich markdown rendering with code highlighting
 - **Cross-Platform** - Single binary deployment
@@ -44,6 +43,7 @@ curl -L https://github.com/zeroworkflow/zw/releases/download/v1.0.9/install.sh |
 
 2. **Get your AI token**:
    - Visit [Z.ai](https://chat.z.ai) to get your API token
+   - Free keys [zw-free keys](https://github.com/zeroworkflow/zw-keys)
    - Add it to `.env` file or set as environment variable
 
 ## 🛠 Commands

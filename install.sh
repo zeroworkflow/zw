@@ -170,7 +170,8 @@ setup_env() {
     print_status "Creating .env file template..."
     cat > .env << 'EOF'
 # ZeroWorkflow Configuration
-# Get your AI token from https://chat.z.ai
+# Get your AI token from https://chat.z.ai  and Free keys https://github.com/zeroworkflow/zw-keys
+
 AI_TOKEN=your_ai_token_here
 EOF
     print_warning "Please edit .env file and add your AI_TOKEN"
@@ -230,6 +231,7 @@ main() {
     echo
     print_status "[X] Documentation: https://github.com/zeroworkflow/zw"
     print_status "🪵 Issues: https://github.com/zeroworkflow/zw/issues"
+    print_status "[!]Free keys https://github.com/zeroworkflow/zw-keys"
 }
 
 # Handle command line arguments
@@ -248,7 +250,7 @@ case "${1:-}" in
         exit 0
         ;;
     --version|-v)
-        echo "ZeroWorkflow Installer v1.0.0"
+        echo "ZeroWorkflow Installer v1.2.1"
         exit 0
         ;;
     *)

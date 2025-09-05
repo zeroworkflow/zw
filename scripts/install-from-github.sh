@@ -173,6 +173,7 @@ setup_env() {
         cat > .env << 'EOF'
 # ZeroWorkflow Configuration
 # Get your AI token from https://chat.z.ai
+# Free keys https://github.com/zeroworkflow/zw-keys
 AI_TOKEN=your_ai_token_here
 EOF
         print_warning "Please edit .env file and add your AI_TOKEN"
@@ -227,7 +228,8 @@ main() {
     print_success "Installation completed successfully!"
     echo
     print_status "🚀 Quick start:"
-    echo "  1. Get your AI token from https://chat.z.ai"
+    echo "  1. Get your AI token from https://chat.z.ai" 
+    echo "  1.1 Free keys https://github.com/zeroworkflow/zw-keys "
     echo "  2. Set it: export AI_TOKEN=\"your_token_here\""
     echo "  3. Ask AI: zw ask \"How to create a Go struct?\""
     echo "  4. Include files: zw ask \"Review this code\" --file main.go"
