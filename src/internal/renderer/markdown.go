@@ -51,9 +51,8 @@ func (r *MarkdownRenderer) processCodeBlocks(content string) string {
 			return r.formatCodeBlock(code, "")
 		}
 		
-		// Try to highlight the code
-		highlighted := r.highlightCode(code, lang)
-		return r.formatCodeBlock(highlighted, lang)
+		// Pass raw code to formatter; it will apply highlighting when lang is provided
+		return r.formatCodeBlock(code, lang)
 	})
 }
 
@@ -107,12 +106,13 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 		}
 	}
 	
-	// Minimum width of 40, maximum of 80
-	if maxWidth < 40 {
-		maxWidth = 40
+	// Add padding for borders and ensure minimum width
+	contentWidth := maxWidth + 2 // +2 for left/right padding
+	if contentWidth < 44 {
+		contentWidth = 44
 	}
-	if maxWidth > 80 {
-		maxWidth = 80
+	if contentWidth > 84 {
+		contentWidth = 84
 	}
 	
 	var result strings.Builder
@@ -120,17 +120,17 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	// Top border with language
 	if lang != "" {
 		langLabel := " " + lang + " "
-		topBorder := "╭─" + langLabel + strings.Repeat("─", maxWidth-len(langLabel)-2) + "╮"
+		topBorder := "╭─" + langLabel + strings.Repeat("─", contentWidth-len(langLabel)-3) + "╮"
 		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
 	} else {
-		topBorder := "╭" + strings.Repeat("─", maxWidth) + "╮"
+		topBorder := "╭" + strings.Repeat("─", contentWidth-2) + "╮"
 		result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(topBorder) + "\n")
 	}
 	
 	// Content lines
 	for _, line := range lines {
 		displayWidth := r.getDisplayWidth(line)
-		padding := maxWidth - displayWidth
+		padding := contentWidth - displayWidth - 4 // -4 for "│ " and " │"
 		if padding < 0 {
 			padding = 0
 		}
@@ -140,7 +140,7 @@ func (r *MarkdownRenderer) formatCodeBlock(code, lang string) string {
 	}
 	
 	// Bottom border
-	bottomBorder := "╰" + strings.Repeat("─", maxWidth) + "╯"
+	bottomBorder := "╰" + strings.Repeat("─", contentWidth-2) + "╯"
 	result.WriteString(color.New(color.FgCyan, color.Bold).Sprint(bottomBorder) + "\n")
 	
 	return result.String()
