@@ -25,26 +25,6 @@ jobs:
             goarch: amd64
             name: zw-linux-amd64
             emoji: 🐧
-          - goos: linux
-            goarch: arm64
-            name: zw-linux-arm64
-            emoji: 🐧
-          - goos: darwin
-            goarch: amd64
-            name: zw-darwin-amd64
-            emoji: 🍎
-          - goos: darwin
-            goarch: arm64
-            name: zw-darwin-arm64
-            emoji: 🍎
-          - goos: windows
-            goarch: amd64
-            name: zw-windows-amd64.exe
-            emoji: 🪟
-          - goos: windows
-            goarch: arm64
-            name: zw-windows-arm64.exe
-            emoji: 🪟
 
     steps:
     - name: 📥 Checkout code
@@ -138,11 +118,6 @@ jobs:
         echo "### Manual Download" >> CHANGELOG.md
         echo "Choose your platform:" >> CHANGELOG.md
         echo "- 🐧 **Linux AMD64**: [zw-linux-amd64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-linux-amd64)" >> CHANGELOG.md
-        echo "- 🐧 **Linux ARM64**: [zw-linux-arm64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-linux-arm64)" >> CHANGELOG.md
-        echo "- 🍎 **macOS AMD64**: [zw-darwin-amd64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-darwin-amd64)" >> CHANGELOG.md
-        echo "- 🍎 **macOS ARM64**: [zw-darwin-arm64](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-darwin-arm64)" >> CHANGELOG.md
-        echo "- 🪟 **Windows AMD64**: [zw-windows-amd64.exe](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-windows-amd64.exe)" >> CHANGELOG.md
-        echo "- 🪟 **Windows ARM64**: [zw-windows-arm64.exe](https://github.com/derxanax/ZeroWorkflow/releases/download/${{ github.ref_name }}/zw-windows-arm64.exe)" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
         echo "## 🚀 Quick Start" >> CHANGELOG.md
         echo '```bash' >> CHANGELOG.md
