@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"zero-workflow/src/internal/config"
 	"zero-workflow/src/pkg/errors"
 	httplib "zero-workflow/src/pkg/http"
 	"zero-workflow/src/pkg/stream"
 	"zero-workflow/src/pkg/types"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -24,14 +25,13 @@ const (
 
 // Client implements the AI client for Z.ai
 type Client struct {
-	config        *config.Config
-	aiParams      *config.AIParams
-	userCtx       *config.UserContext
-	authToken     string
-	httpClient    *httplib.SecureHTTPClient
+	config          *config.Config
+	aiParams        *config.AIParams
+	userCtx         *config.UserContext
+	authToken       string
+	httpClient      *httplib.SecureHTTPClient
 	streamProcessor *stream.Processor
 }
-
 
 // ChatResponse represents the chat creation response
 type ChatResponse struct {
@@ -227,7 +227,6 @@ func (c *Client) sendMessageStream(ctx context.Context, chatID string, messages 
 	return c.streamProcessor.ProcessStream(resp.Body, callback)
 }
 
-
 // Helper methods for building request components
 
 func (c *Client) setHeaders(req *http.Request, chatID string) {
@@ -237,7 +236,7 @@ func (c *Client) setHeaders(req *http.Request, chatID string) {
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Origin", "https://chat.z.ai")
 	req.Header.Set("X-FE-Version", apiVersion)
-	
+
 	if chatID != "" {
 		req.Header.Set("Referer", "https://chat.z.ai/c/"+chatID)
 	}
@@ -275,14 +274,14 @@ func (c *Client) buildFeatures() []map[string]interface{} {
 
 func (c *Client) buildFeaturesMap() map[string]interface{} {
 	return map[string]interface{}{
-		"image_generation":  false,
-		"code_interpreter":  false,
-		"web_search":        false,
-		"auto_web_search":   false,
-		"preview_mode":      true,
-		"flags":             []string{},
-		"features":          c.buildFeatures(),
-		"enable_thinking":   false,
+		"image_generation": false,
+		"code_interpreter": false,
+		"web_search":       false,
+		"auto_web_search":  false,
+		"preview_mode":     true,
+		"flags":            []string{},
+		"features":         c.buildFeatures(),
+		"enable_thinking":  false,
 	}
 }
 

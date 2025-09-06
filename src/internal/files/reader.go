@@ -240,22 +240,37 @@ func (r *Reader) validateSinglePath(path string) error {
 	// Normalize path
 	cleanPath := filepath.Clean(path)
 	
-	// Check for path traversal attempts
-	if strings.Contains(cleanPath, "..") {
+	// Get current working directory for path validation
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot determine current directory: %w", err)
+	}
+	
+	// Convert to absolute path for proper validation
+	var absPath string
+	if filepath.IsAbs(cleanPath) {
+		absPath = cleanPath
+	} else {
+		absPath = filepath.Join(cwd, cleanPath)
+	}
+	
+	// Normalize the absolute path
+	absPath = filepath.Clean(absPath)
+	
+	// Check if the resolved path is within the current directory
+	rel, err := filepath.Rel(cwd, absPath)
+	if err != nil {
+		return fmt.Errorf("invalid path resolution: %s", path)
+	}
+	
+	// Check for path traversal attempts (more robust check)
+	if strings.HasPrefix(rel, "..") || strings.Contains(rel, "..") {
 		return fmt.Errorf("path traversal not allowed: %s", path)
 	}
 	
-	// Check for absolute paths outside current directory
-	if filepath.IsAbs(cleanPath) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("cannot determine current directory: %w", err)
-		}
-		
-		rel, err := filepath.Rel(cwd, cleanPath)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("absolute path outside current directory not allowed: %s", path)
-		}
+	// Additional check for symlinks that might escape
+	if strings.Contains(rel, "/") && (strings.HasPrefix(rel, "../") || strings.Contains(rel, "/../")) {
+		return fmt.Errorf("path traversal not allowed: %s", path)
 	}
 	
 	// Check for dangerous file extensions

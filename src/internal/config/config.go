@@ -11,10 +11,13 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	APIBaseURL string
-	UserAgent  string
-	Timeout    time.Duration
-	Model      string
+	APIBaseURL     string
+	UserAgent      string
+	Timeout        time.Duration
+	Model          string
+	Provider       string // "zai" or "custom"
+	CustomAPIKey   string // for custom API
+	CustomEndpoint string // for custom API
 }
 
 // AIParams holds AI-specific parameters
@@ -34,26 +37,47 @@ type UserContext struct {
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
-	apiURL := os.Getenv("ZW_API_URL")
-	if apiURL == "" {
-		apiURL = "https://chat.z.ai/api"
+	provider := os.Getenv("ZW_PROVIDER")
+	if provider == "" {
+		provider = "zai" // default to z.ai
 	}
-	
+
+	var apiURL string
+	var model string
+
+	if provider == "custom" {
+		apiURL = os.Getenv("ZW_CUSTOM_ENDPOINT")
+		if apiURL == "" {
+			apiURL = "http://localhost:8080/api" // default custom endpoint
+		}
+		model = os.Getenv("ZW_CUSTOM_MODEL")
+		if model == "" {
+			model = "custom-model"
+		}
+	} else {
+		apiURL = os.Getenv("ZW_API_URL")
+		if apiURL == "" {
+			apiURL = "https://chat.z.ai/api"
+		}
+		model = os.Getenv("ZW_MODEL")
+		if model == "" {
+			model = "0727-360B-API"
+		}
+	}
+
 	userAgent := os.Getenv("ZW_USER_AGENT")
 	if userAgent == "" {
 		userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 	}
-	
-	model := os.Getenv("ZW_MODEL")
-	if model == "" {
-		model = "0727-360B-API"
-	}
 
 	return &Config{
-		APIBaseURL: apiURL,
-		UserAgent:  userAgent,
-		Timeout:    120 * time.Second,
-		Model:      model,
+		APIBaseURL:     apiURL,
+		UserAgent:      userAgent,
+		Timeout:        120 * time.Second,
+		Model:          model,
+		Provider:       provider,
+		CustomAPIKey:   os.Getenv("ZW_CUSTOM_API_KEY"),
+		CustomEndpoint: apiURL,
 	}
 }
 
@@ -102,31 +126,31 @@ func GetToken() (string, error) {
 
 // LoadEnv loads environment variables from .env file if it exists
 func LoadEnv() error {
-    // Try to find .env file in current directory, parent directories, and XDG/HOME config locations
-    envPaths := []string{
-        ".env",
-        "../.env",
-        "../../.env",
-    }
+	// Try to find .env file in current directory, parent directories, and XDG/HOME config locations
+	envPaths := []string{
+		".env",
+		"../.env",
+		"../../.env",
+	}
 
-    // XDG config path: $XDG_CONFIG_HOME/zw/.env
-    if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-        envPaths = append(envPaths, filepath.Join(xdg, "zw", ".env"))
-    }
+	// XDG config path: $XDG_CONFIG_HOME/zw/.env
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		envPaths = append(envPaths, filepath.Join(xdg, "zw", ".env"))
+	}
 
-    // HOME config path: $HOME/.config/zw/.env
-    if home := os.Getenv("HOME"); home != "" {
-        envPaths = append(envPaths, filepath.Join(home, ".config", "zw", ".env"))
-    }
+	// HOME config path: $HOME/.config/zw/.env
+	if home := os.Getenv("HOME"); home != "" {
+		envPaths = append(envPaths, filepath.Join(home, ".config", "zw", ".env"))
+	}
 
-    for _, envPath := range envPaths {
-        if _, err := os.Stat(envPath); err == nil {
-            if err := godotenv.Load(envPath); err != nil {
-                return fmt.Errorf("failed to load %s: %w", envPath, err)
-            }
-            return nil
-        }
-    }
+	for _, envPath := range envPaths {
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Load(envPath); err != nil {
+				return fmt.Errorf("failed to load %s: %w", envPath, err)
+			}
+			return nil
+		}
+	}
 
 	// Try to find .env in executable directory
 	execPath, err := os.Executable()
@@ -144,4 +168,3 @@ func LoadEnv() error {
 	// .env file not found, but that's okay
 	return nil
 }
-
