@@ -1,7 +1,7 @@
 # ZeroWorkflow
 
 [🇬🇧 EN](../../README.md)
-
+ - сайт [Zw](https://ZeroWorkflow.github.io)
 <img src="../../assets/image/logo/light_logo.png" alt="Логотип ZeroWorkflow" width="310"/>
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)

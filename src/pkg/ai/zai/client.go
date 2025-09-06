@@ -159,13 +159,17 @@ func (c *Client) createNewChat(ctx context.Context, firstMessage string) (string
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", errors.NewNetworkError("failed to send request", "", c.config.APIBaseURL+"/v1/chats/new", 0, err)
+		// Sanitize error to prevent token leakage
+		sanitizedErr := fmt.Errorf("network error: %s", errors.SanitizeForLog(err))
+		return "", errors.NewNetworkError("failed to send request", "", c.config.APIBaseURL+"/v1/chats/new", 0, sanitizedErr)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", errors.NewNetworkError("API request failed", "", c.config.APIBaseURL+"/v1/chats/new", resp.StatusCode, fmt.Errorf(string(body)))
+		// Sanitize response body to prevent token leakage
+		sanitizedBody := errors.SanitizeForLog(fmt.Errorf(string(body)))
+		return "", errors.NewNetworkError("API request failed", "", c.config.APIBaseURL+"/v1/chats/new", resp.StatusCode, fmt.Errorf(sanitizedBody))
 	}
 
 	var chatResp ChatResponse
@@ -207,13 +211,17 @@ func (c *Client) sendMessageStream(ctx context.Context, chatID string, messages 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", errors.NewNetworkError("failed to send request", requestID, c.config.APIBaseURL+"/chat/completions", 0, err)
+		// Sanitize error to prevent token leakage
+		sanitizedErr := fmt.Errorf("network error: %s", errors.SanitizeForLog(err))
+		return "", errors.NewNetworkError("failed to send request", requestID, c.config.APIBaseURL+"/chat/completions", 0, sanitizedErr)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", errors.NewNetworkError("API request failed", requestID, c.config.APIBaseURL+"/chat/completions", resp.StatusCode, fmt.Errorf(string(body)))
+		// Sanitize response body to prevent token leakage
+		sanitizedBody := errors.SanitizeForLog(fmt.Errorf(string(body)))
+		return "", errors.NewNetworkError("API request failed", requestID, c.config.APIBaseURL+"/chat/completions", resp.StatusCode, fmt.Errorf(sanitizedBody))
 	}
 
 	return c.streamProcessor.ProcessStream(resp.Body, callback)

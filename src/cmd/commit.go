@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	zeroconfig "zero-workflow/src/internal/config"
 	"zero-workflow/src/pkg/ai/zai"
+	"zero-workflow/src/pkg/errors"
 )
 
 var (
@@ -293,12 +294,18 @@ func parseCommitOptions(response string) []CommitOption {
 }
 
 func getStagedDiff(repo *git.Repository) (string, error) {
+	// Validate git command for security
+	args := []string{"--staged"}
+	if err := errors.ValidateGitCommand("diff", args); err != nil {
+		return "", fmt.Errorf("git command validation failed: %w", err)
+	}
+
 	// Use the system's `git diff` command for a reliable and standard diff.
 	cmd := exec.Command("git", "diff", "--staged")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if len(output) == 0 {
-			return "", fmt.Errorf("failed to get staged diff: %w", err)
+			return "", errors.NewGitError("diff", args, "failed to get staged diff", err)
 		}
 	}
 
@@ -327,27 +334,41 @@ func pushToRemote(repo *git.Repository) error {
 		return fmt.Errorf("no remote 'origin' found: %w", err)
 	}
 	
+	// Validate git command for security
+	args := []string{"origin", head.Name().Short()}
+	if err := errors.ValidateGitCommand("push", args); err != nil {
+		return fmt.Errorf("git command validation failed: %w", err)
+	}
+	
 	// Use system git command for push to leverage existing auth
 	// This avoids authentication issues with go-git
 	cmd := exec.Command("git", "push", "origin", head.Name().Short())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to push: %s", string(output))
+		// Sanitize output to prevent token leakage
+		sanitizedOutput := errors.SanitizeForLog(fmt.Errorf(string(output)))
+		return errors.NewGitError("push", args, "failed to push", fmt.Errorf(sanitizedOutput))
 	}
 	
 	return nil
 }
 
 func getGitConfig(key string) (string, error) {
+	// Validate git command for security
+	args := []string{key}
+	if err := errors.ValidateGitCommand("config", args); err != nil {
+		return "", fmt.Errorf("git command validation failed: %w", err)
+	}
+
 	cmd := exec.Command("git", "config", key)
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("Error: `git config %s` is not set. Please configure it using `git config --global %s \"Your Name/Email\"`", key, key)
+		return "", errors.NewGitError("config", args, fmt.Sprintf("git config %s is not set. Please configure it using git config --global %s \"Your Name/Email\"", key, key), err)
 	}
 	
 	value := strings.TrimSpace(string(output))
 	if value == "" {
-		return "", fmt.Errorf("Error: `git config %s` is empty. Please configure it.", key)
+		return "", errors.NewGitError("config", args, fmt.Sprintf("git config %s is empty. Please configure it", key), nil)
 	}
 	
 	return value, nil
