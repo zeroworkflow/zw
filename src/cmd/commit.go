@@ -14,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
 	zeroconfig "zero-workflow/src/internal/config"
+	"zero-workflow/src/internal/handlers"
 	"zero-workflow/src/pkg/ai/zai"
 	"zero-workflow/src/pkg/errors"
 )
@@ -89,9 +90,16 @@ func runCommit(cmd *cobra.Command, args []string) error {
 
 	var selectedCommit CommitOption
 	for {
-		// Generate commit message using AI
-		color.Cyan("Analyzing changes with AI...")
-		commitOptions, err := generateCommitMessages(diff, stagedFiles)
+		// Generate commit message using AI with spinner
+		spinnerHandler := handlers.NewSpinnerHandler("Analyzing changes with AI")
+		var commitOptions []CommitOption
+		var err error
+
+		err = spinnerHandler.WithSpinner(func() error {
+			commitOptions, err = generateCommitMessages(diff, stagedFiles)
+			return err
+		})
+
 		if err != nil {
 			return fmt.Errorf("failed to generate commit messages: %w", err)
 		}
@@ -125,8 +133,7 @@ func runCommit(cmd *cobra.Command, args []string) error {
 			break // Proceed to commit
 		}
 		if confirm == "r" {
-			color.Cyan("Regenerating commit message...")
-			continue // Loop to regenerate
+			continue // Loop to regenerate with spinner
 		}
 
 		// Any other input cancels
