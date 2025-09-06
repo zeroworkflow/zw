@@ -6,8 +6,16 @@ echo "🚀 Installing ZeroWorkflow..."
 # Configuration
 BINARY_NAME="zw"
 INSTALL_DIR="$HOME/.local/bin"
-REPO_URL="https://github.com/zeroworkflow/zw"
+REPO_OWNER="zeroworkflow"
+REPO_NAME="zw"
 CONFIG_DIR="$HOME/.config/zw"
+
+# GitHub API token for higher rate limits (optional)
+if [ -n "$GITHUB_TOKEN" ]; then
+    GITHUB_AUTH="-H \"Authorization: token $GITHUB_TOKEN\""
+else
+    GITHUB_AUTH=""
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,27 +40,73 @@ echo -e "  OS: $OS"
 echo -e "  Architecture: $ARCH"
 echo
 
-# Check if Go is installed
-if ! command -v go &> /dev/null; then
-    echo -e "${RED}❌ Go is not installed. Please install Go 1.21+ first.${NC}"
-    echo -e "${YELLOW}💡 Visit: https://golang.org/dl/${NC}"
+# Get latest release info
+echo -e "${BLUE}🔍 Finding latest release...${NC}"
+API_RESPONSE=$(curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
+
+# Check for GitHub API errors
+if [ "$HTTP_CODE" = "403" ]; then
+    if echo "$API_RESPONSE" | grep -q "rate limit"; then
+        echo -e "${RED}❌ GitHub API rate limit exceeded${NC}"
+        echo -e "${YELLOW}💡 Too many requests. Please try again later or use a GitHub token${NC}"
+        echo -e "${BLUE}ℹ️  Set GITHUB_TOKEN environment variable to increase rate limit${NC}"
+    else
+        echo -e "${RED}❌ GitHub API access forbidden (403)${NC}"
+    fi
+    exit 1
+elif [ "$HTTP_CODE" = "404" ]; then
+    echo -e "${RED}❌ Repository not found (404)${NC}"
+    exit 1
+elif [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}❌ GitHub API error (HTTP $HTTP_CODE)${NC}"
     exit 1
 fi
 
-GO_VERSION=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
-echo -e "${GREEN}✅ Go $GO_VERSION detected${NC}"
+LATEST_TAG=$(echo "$API_RESPONSE" | grep -Po '"tag_name": "\K.*?(?=")')
+
+if [ -z "$LATEST_TAG" ]; then
+    echo -e "${RED}❌ Failed to parse release tag from API response${NC}"
+    echo -e "${YELLOW}💡 API Response: $API_RESPONSE${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Found latest version: $LATEST_TAG${NC}"
+
+# Construct download URL
+BINARY_FILE="$BINARY_NAME-$OS-$ARCH"
+DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$LATEST_TAG/$BINARY_FILE"
+
+echo -e "${BLUE}📥 Downloading binary...${NC}"
+echo -e "  URL: $DOWNLOAD_URL"
 
 # Create temporary directory
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR"
 
-echo -e "${BLUE}📥 Cloning repository...${NC}"
-git clone "$REPO_URL" zeroworkflow
-cd zeroworkflow
+# Download binary with better error handling
+echo -e "${BLUE}⬇️  Downloading $BINARY_FILE...${NC}"
+HTTP_CODE=$(curl -L -w "%{http_code}" -o "$BINARY_NAME" "$DOWNLOAD_URL")
 
-echo -e "${BLUE}🔨 Building ZeroWorkflow...${NC}"
-go mod tidy
-go build -o "$BINARY_NAME" src/main.go
+if [ "$HTTP_CODE" = "404" ]; then
+    echo -e "${RED}❌ Binary not found (404)${NC}"
+    echo -e "${YELLOW}💡 Available binaries for $LATEST_TAG:${NC}"
+    curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$LATEST_TAG" | grep -Po '"name": "\K[^"]*(?=")' | grep "^$BINARY_NAME" || echo "  No matching binaries found"
+    exit 1
+elif [ "$HTTP_CODE" = "403" ]; then
+    echo -e "${RED}❌ Download forbidden - too many requests${NC}"
+    echo -e "${YELLOW}💡 GitHub rate limit exceeded. Try again later${NC}"
+    exit 1
+elif [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}❌ Download failed (HTTP $HTTP_CODE)${NC}"
+    exit 1
+fi
+
+# Verify downloaded file
+if [ ! -f "$BINARY_NAME" ] || [ ! -s "$BINARY_NAME" ]; then
+    echo -e "${RED}❌ Downloaded file is empty or missing${NC}"
+    exit 1
+fi
 
 echo -e "${BLUE}📦 Installing binary...${NC}"
 mkdir -p "$INSTALL_DIR"
@@ -84,8 +138,18 @@ fi
 cd /
 rm -rf "$TMP_DIR"
 
+echo -e "${GREEN}✅ Binary installed to: $INSTALL_DIR/$BINARY_NAME${NC}"
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo -e "${YELLOW}⚠️  $HOME/.local/bin is not in your PATH${NC}"
+    echo -e "${BLUE}💡 Add this to your shell profile (~/.bashrc or ~/.zshrc):${NC}"
+    echo -e "  ${YELLOW}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+    echo
+fi
+
 echo
-echo -e "${GREEN}🎉 ZeroWorkflow installed successfully!${NC}"
+echo -e "${GREEN}🎉 ZeroWorkflow $LATEST_TAG installed successfully!${NC}"
 echo
 echo -e "${BLUE}📚 Quick Start:${NC}"
 echo -e "  ${YELLOW}zw ask \"How to create a Go struct?\"${NC}"
@@ -94,8 +158,8 @@ echo -e "  ${YELLOW}zw commit${NC}  # AI-powered commit messages"
 echo
 echo -e "${BLUE}🔧 Configuration:${NC}"
 echo -e "  Edit: ${YELLOW}$CONFIG_DIR/.env${NC}"
-echo -e "  Add your AI token from: ${YELLOW}https://chat.z.ai${NC}"
+echo -e "  Free tokens : github.com/zeroworkflow/zw-keys"
 echo
 echo -e "${BLUE}📖 Documentation:${NC}"
-echo -e "  ${YELLOW}$REPO_URL${NC}"
+echo -e "  ${YELLOW}https://github.com/$REPO_OWNER/$REPO_NAME${NC}"
 echo

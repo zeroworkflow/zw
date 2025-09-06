@@ -82,16 +82,22 @@ func Load() (*Config, error) {
 	return DefaultConfig(), nil
 }
 
-// GetToken retrieves AI token from environment
+// GetToken retrieves AI token from environment with fallback priority
 func GetToken() (string, error) {
-	// Try to load .env file first
-	LoadEnv()
-
+	// First priority: check if AI_TOKEN is already set in environment (from export)
 	token := os.Getenv("AI_TOKEN")
-	if token == "" {
-		return "", fmt.Errorf("AI_TOKEN environment variable not set")
+	if token != "" {
+		return token, nil
 	}
-	return token, nil
+
+	// Second priority: try to load from .env file and check again
+	LoadEnv()
+	token = os.Getenv("AI_TOKEN")
+	if token != "" {
+		return token, nil
+	}
+
+	return "", fmt.Errorf("AI_TOKEN not found in environment variables or .env file")
 }
 
 // LoadEnv loads environment variables from .env file if it exists
